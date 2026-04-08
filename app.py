@@ -2,11 +2,14 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+import requests
+from bs4 import BeautifulSoup
+import re
 
 st.set_page_config(page_title="핀드 담보 심사", page_icon="🏦", layout="wide")
 
 st.title("🏦 핀드 담보 적격성 자동 심사 시스템")
-st.caption("KB증권 하이브리드 계좌운용규칙 기준 | v2.0")
+st.caption("KB증권 하이브리드 계좌운용규칙 기준 | v2.1")
 st.markdown("---")
 
 # 사이드바
@@ -20,7 +23,7 @@ with st.sidebar:
     예) AAPL, TSLA, MSFT
     """)
     st.markdown("---")
-    st.success("✅ **자동 데이터 수집**  \n실시간 주가 및 기업정보")
+    st.success("✅ **자동 데이터 수집**  \nGoogle Finance + Yahoo Finance")
     
     with st.expander("⚠️ 주요 불가사유"):
         st.markdown("""
@@ -37,19 +40,69 @@ with st.sidebar:
         - PTP 종목
         """)
 
-# 국내주식 데이터 가져오기
+# 국내주식 Google Finance에서 데이터 가져오기
 def get_korean_stock_data(ticker):
     try:
-        stock = yf.Ticker(f"{ticker}.KS")
-        info = stock.info
+        # Google Finance URL
+        url = f"https://www.google.com/finance/quote/{ticker}:KRX?hl=ko"
         
-        name = info.get('longName', info.get('shortName', '조회 실패'))
-        price = info.get('currentPrice', info.get('regularMarketPrice', 0))
-        market_cap = info.get('marketCap', 0) / 1e8
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
         
-        hist = stock.history(period="1y")
-        high_52w = hist['High'].max() if not hist.empty else 0
-        low_52w = hist['Low'].min() if not hist.empty else 0
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            return {'success': False, 'error': '데이터 조회 실패'}
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 종목명
+        name_elem = soup.find('div', {'class': 'zzDege'})
+        name = name_elem.text if name_elem else '조회 실패'
+        
+        # 현재가 (쉼표 제거)
+        price_elem = soup.find('div', {'class': 'YMlKec fxKbKc'})
+        price_text = price_elem.text if price_elem else '0'
+        price_text = price_text.replace('₩', '').replace(',', '').strip()
+        price = float(price_text) if price_text.replace('.', '').isdigit() else 0
+        
+        # 시가총액 찾기
+        market_cap = 0
+        divs = soup.find_all('div', {'class': 'P6K39c'})
+        for div in divs:
+            text = div.text
+            if '시가총액' in text or 'Market cap' in text:
+                # 다음 div에서 값 추출
+                next_div = div.find_next('div', {'class': 'P6K39c'})
+                if next_div:
+                    mcap_text = next_div.text
+                    # "1203.24조 KRW" 형태 파싱
+                    if '조' in mcap_text:
+                        mcap_num = float(re.findall(r'[\d.]+', mcap_text)[0])
+                        market_cap = mcap_num * 10000  # 조 -> 억
+                    elif '억' in mcap_text:
+                        market_cap = float(re.findall(r'[\d.]+', mcap_text)[0])
+                    break
+        
+        # 52주 최고/최저
+        high_52w = 0
+        low_52w = 0
+        
+        divs = soup.find_all('div', {'class': 'P6K39c'})
+        for i, div in enumerate(divs):
+            text = div.text
+            if '52주' in text or '52-week' in text:
+                # 다음 div에서 값 추출
+                next_div = div.find_next('div', {'class': 'P6K39c'})
+                if next_div:
+                    range_text = next_div.text
+                    # "₩52,900 - ₩223,000" 형태 파싱
+                    numbers = re.findall(r'[\d,]+', range_text)
+                    if len(numbers) >= 2:
+                        low_52w = float(numbers[0].replace(',', ''))
+                        high_52w = float(numbers[1].replace(',', ''))
+                    break
         
         return {
             'success': True,
@@ -58,39 +111,16 @@ def get_korean_stock_data(ticker):
             'market_cap': market_cap,
             'high_52w': high_52w,
             'low_52w': low_52w,
-            'pe_ratio': info.get('trailingPE', 0),
         }
-    except:
-        try:
-            stock = yf.Ticker(f"{ticker}.KQ")
-            info = stock.info
-            
-            name = info.get('longName', info.get('shortName', '조회 실패'))
-            price = info.get('currentPrice', info.get('regularMarketPrice', 0))
-            market_cap = info.get('marketCap', 0) / 1e8
-            
-            hist = stock.history(period="1y")
-            high_52w = hist['High'].max() if not hist.empty else 0
-            low_52w = hist['Low'].min() if not hist.empty else 0
-            
-            return {
-                'success': True,
-                'name': name,
-                'price': price,
-                'market_cap': market_cap,
-                'high_52w': high_52w,
-                'low_52w': low_52w,
-                'pe_ratio': info.get('trailingPE', 0),
-            }
-        except:
-            return {'success': False}
+        
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
 
 # 상세 의견 생성 함수들
 def generate_rejection_opinion(violations, data, is_korean=True):
     """담보 불가 의견 생성"""
     opinion = "⛔ 담보 설정 불가\n\n"
     
-    # 불가 사유
     opinion += "**[불가 사유]**\n"
     for v in violations:
         opinion += f"• {v}\n"
@@ -101,7 +131,6 @@ def generate_rejection_opinion(violations, data, is_korean=True):
     opinion += "유동성: 🔴 위험\n"
     opinion += "**종합 평가: 🔴 부적격**\n\n"
     
-    # 리스크팀 의견
     opinion += "**[리스크관리팀 의견]**\n"
     
     if is_korean:
@@ -129,27 +158,23 @@ def generate_rejection_opinion(violations, data, is_korean=True):
 
 def generate_conditional_opinion(warnings, data, is_korean=True):
     """조건부 가능 의견 생성"""
-    # 위험도 계산
     risk_level = "고위험" if len(warnings) >= 3 else "주의"
     risk_emoji = "🔴" if len(warnings) >= 3 else "🟠"
     max_ltv = "30%" if len(warnings) >= 3 else "40%"
     
     opinion = f"⚠️ 조건부 담보 가능 ({risk_level} - 보수적 관리 필수)\n\n"
     
-    # 주의 사유
     opinion += "**[주의 사유]**\n"
     for w in warnings:
         opinion += f"• {w}\n"
     
     opinion += "\n**[위험도 평가]**\n"
     
-    # 재무 건전성
     if any("자본잠식" in w or "부채" in w for w in warnings):
         opinion += "재무 건전성: 🔴 위험\n"
     else:
         opinion += "재무 건전성: 🟡 보통\n"
     
-    # 주가 안정성
     if any("변동" in w or "급락" in w for w in warnings):
         opinion += "주가 안정성: 🟠 주의\n"
     else:
@@ -158,14 +183,12 @@ def generate_conditional_opinion(warnings, data, is_korean=True):
     opinion += "유동성: 🟡 보통\n"
     opinion += f"**종합 평가: {risk_emoji} {risk_level}**\n\n"
     
-    # 담보 설정 조건
     opinion += "**[담보 설정 조건]**\n"
     opinion += f"1. 최대 대출비율 {max_ltv} 이하로 제한\n"
     opinion += "2. 담보비율 150% 미만 시 즉시 연락 필수\n"
     opinion += "3. 일일 모니터링 대상 등록\n"
     opinion += "4. 추가 하락 시 담보 추가 징구 가능성 안내\n\n"
     
-    # 리스크팀 의견
     opinion += "**[리스크관리팀 의견]**\n"
     
     if any("자본잠식" in w for w in warnings):
@@ -194,16 +217,16 @@ def generate_approval_opinion(data, is_korean=True):
     """담보 가능 의견 생성"""
     opinion = "✅ 담보 설정 가능 (우량 종목)\n\n"
     
-    # 적격 근거
     opinion += "**[적격 근거]**\n"
     
     if is_korean:
-        if data['market_cap'] >= 1000:
+        if data['market_cap'] >= 10000:
+            opinion += f"✓ 시가총액 {data['market_cap']:.0f}억원 (초대형주)\n"
+        elif data['market_cap'] >= 1000:
             opinion += f"✓ 시가총액 {data['market_cap']:.0f}억원 (대형주)\n"
         else:
             opinion += f"✓ 시가총액 {data['market_cap']:.0f}억원 (기준 충족)\n"
-        opinion += "✓ 자본잠식률 0% (재무 건전)\n"
-        opinion += "✓ 관리종목 이력 없음\n"
+        opinion += "✓ 계좌운용규칙 기준 충족\n"
         opinion += "✓ 안정적 거래량 유지\n"
     else:
         mcap_b = data.get('market_cap', 0)
@@ -212,18 +235,16 @@ def generate_approval_opinion(data, is_korean=True):
         opinion += "✓ 높은 유동성\n"
     
     opinion += "\n**[위험도 평가]**\n"
-    opinion += "재무 건전성: 🟢 우량\n"
+    opinion += "재무 건전성: 🟢 양호\n"
     opinion += "주가 안정성: 🟢 안정\n"
     opinion += "유동성: 🟢 우수\n"
     opinion += "**종합 평가: 🟢 우량**\n\n"
     
-    # 담보 설정 조건
     opinion += "**[담보 설정 조건]**\n"
     opinion += "• 최대 대출비율: 계좌평가금액의 200% 이내\n"
     opinion += "• 자동반대매매(로스컷): 130%\n"
     opinion += "• 현금인출 가능: 140% 이상\n\n"
     
-    # 리스크팀 의견
     opinion += "**[리스크관리팀 의견]**\n"
     
     if is_korean:
@@ -231,12 +252,12 @@ def generate_approval_opinion(data, is_korean=True):
             opinion += "해당 종목은 초대형 우량주로, "
         else:
             opinion += "해당 종목은 "
-        opinion += "재무 건전성이 우수하고 유동성이 풍부하여 담보 적격성이 높습니다. 정상적인 담보 설정이 가능합니다."
+        opinion += "계좌운용규칙 기준을 충족하여 담보 적격성이 인정됩니다. 정상적인 담보 설정이 가능합니다."
     else:
         opinion += "해당 종목은 주요 거래소 상장 우량주로 담보 적격성이 높습니다. 정상적인 담보 설정이 가능합니다."
     
     opinion += "\n\n**[고객 안내 문구]**\n"
-    opinion += '"해당 종목은 우량주로 담보 설정에 문제가 없습니다. 계좌평가금액의 최대 200%까지 대출 가능합니다."'
+    opinion += '"해당 종목은 담보 설정에 문제가 없습니다. 계좌평가금액의 최대 200%까지 대출 가능합니다."'
     
     return opinion
 
@@ -253,20 +274,20 @@ if st.button("🔍 자동 심사", type="primary", use_container_width=True):
         if is_korean:
             st.markdown("## 🇰🇷 국내주식 자동 심사")
             
-            with st.spinner("📡 실시간 데이터 수집 중..."):
+            with st.spinner("📡 Google Finance에서 데이터 수집 중..."):
                 data = get_korean_stock_data(ticker)
                 
                 if not data['success']:
-                    st.error("❌ 데이터 조회 실패. 종목코드를 확인하세요.")
+                    st.error(f"❌ 데이터 조회 실패: {data.get('error', '알 수 없는 오류')}")
+                    st.info("💡 종목코드를 확인하세요. 예: 005930 (삼성전자)")
                 else:
                     # 기본 정보
                     st.markdown("### 📌 기본 정보")
-                    c1, c2, c3, c4, c5 = st.columns(5)
+                    c1, c2, c3, c4 = st.columns(4)
                     c1.metric("종목코드", ticker)
-                    c2.metric("종목명", data['name'][:15])
+                    c2.metric("종목명", data['name'][:20])
                     c3.metric("현재가", f"{data['price']:,.0f}원")
                     c4.metric("시가총액", f"{data['market_cap']:,.0f}억")
-                    c5.metric("P/E", f"{data['pe_ratio']:.1f}" if data['pe_ratio'] > 0 else "N/A")
                     
                     st.markdown("---")
                     
@@ -275,7 +296,9 @@ if st.button("🔍 자동 심사", type="primary", use_container_width=True):
                     warnings = []
                     
                     # 1차: 시가총액
-                    if data['market_cap'] < 100:
+                    if data['market_cap'] == 0:
+                        st.warning("⚠️ 시가총액 정보를 가져오지 못했습니다. 수동 확인이 필요합니다.")
+                    elif data['market_cap'] < 100:
                         violations.append(f"시가총액 {data['market_cap']:.0f}억원 (기준: 100억 이상)")
                     
                     # 2차: 변동성
@@ -306,12 +329,13 @@ if st.button("🔍 자동 심사", type="primary", use_container_width=True):
                     st.markdown("---")
                     
                     # 주가 정보
-                    st.markdown("### 📈 주가 정보 (52주)")
-                    p1, p2, p3 = st.columns(3)
-                    p1.metric("최고가", f"{data['high_52w']:,.0f}원")
-                    p2.metric("최저가", f"{data['low_52w']:,.0f}원")
-                    if volatility > 0:
-                        p3.metric("변동폭", f"{volatility:.1f}%")
+                    if data['high_52w'] > 0 or data['low_52w'] > 0:
+                        st.markdown("### 📈 주가 정보 (52주)")
+                        p1, p2, p3 = st.columns(3)
+                        p1.metric("최고가", f"{data['high_52w']:,.0f}원")
+                        p2.metric("최저가", f"{data['low_52w']:,.0f}원")
+                        if volatility > 0:
+                            p3.metric("변동폭", f"{volatility:.1f}%")
                     
                     # 다운로드
                     st.markdown("---")
@@ -446,4 +470,4 @@ if st.button("🔍 자동 심사", type="primary", use_container_width=True):
                     st.info("💡 티커를 다시 확인해주세요. 예: AAPL, MSFT, TSLA")
 
 st.markdown("---")
-st.caption("ⓒ 2026 Pind Inc. | v2.0 상세 리스크 분석")
+st.caption("ⓒ 2026 Pind Inc. | v2.1 Google Finance 연동")
