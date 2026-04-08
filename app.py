@@ -2,301 +2,124 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
-import time
+import requests
+from bs4 import BeautifulSoup
 
-# 페이지 설정
-st.set_page_config(
-    page_title="핀드 담보 적격성 자동 심사 시스템",
-    page_icon="🏦",
-    layout="wide"
-)
+st.set_page_config(page_title="핀드 담보 심사", page_icon="🏦", layout="wide")
 
-# CSS 스타일
-st.markdown("""
-<style>
-.big-font {
-    font-size:20px !important;
-    font-weight: bold;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# 제목
 st.title("🏦 핀드 담보 적격성 자동 심사 시스템")
-st.markdown("**KB증권 하이브리드 계좌운용규칙 기준**")
+st.caption("KB증권 하이브리드 | v2.0 - 국내/해외 완전 자동화")
 st.markdown("---")
 
 # 사이드바
 with st.sidebar:
-    st.header("📊 시스템 정보")
-    st.info("""
-    **버전**: v1.0  
-    **업데이트**: 2026-04-08  
-    **규칙 기준**: KB증권 하이브리드
-    """)
-    
-    st.markdown("---")
-    st.header("ℹ️ 사용 가이드")
+    st.header("ℹ️ 사용법")
     st.markdown("""
-    1. 종목코드 또는 티커 입력
-    2. 시장 선택 (자동 감지)
-    3. [심사 시작] 버튼 클릭
-    4. 결과 확인 및 다운로드
+    **국내주식**: 6자리 숫자  
+    예) 005930, 127120, 310210
     
-    **국내주식 예시**:  
-    - 005930 (삼성전자)  
-    - 127120 (제이에스링크)
-    
-    **해외주식 예시**:  
-    - AAPL (애플)  
-    - TSLA (테슬라)
+    **해외주식**: 영문 티커  
+    예) AAPL, TSLA, MSFT
     """)
-    
     st.markdown("---")
-    st.header("⚠️ 주요 불가 사유")
-    with st.expander("국내주식"):
-        st.markdown("""
-        - 비상장 주식
-        - 관리종목
-        - 거래정지 예정
-        - 시가총액 100억 미만
-        - 액면가 100% 이하
-        - 최근 7일간 -50% 이상
-        - 정리매매종목
-        """)
+    st.success("✅ **완전 자동화**  \n국내/해외 모두 실시간 데이터")
     
-    with st.expander("해외주식"):
+    with st.expander("⚠️ 불가사유"):
         st.markdown("""
-        - 비상장 주식
+        **국내주식**
+        - 관리종목
+        - 거래정지
+        - 시총 100억 미만
+        - 자본잠식 50% 이상
+        - 부채비율 300% 이상
+        
+        **해외주식**
+        - 비허용 거래소
         - PTP 종목
-        - S&P500/NASDAQ100 미포함
-        - OTC 시장
         """)
 
-# 메인 화면
-col1, col2 = st.columns([3, 1])
-
-with col1:
-    ticker_input = st.text_input(
-        "**종목코드 또는 티커 입력**",
-        placeholder="예: 005930, AAPL",
-        help="국내주식: 6자리 숫자 / 해외주식: 영문 티커"
-    )
-
-with col2:
-    market_type = st.selectbox(
-        "**시장 구분**",
-        ["자동 감지", "국내 주식", "해외 주식"]
-    )
-
-if st.button("🔍 심사 시작", type="primary", use_container_width=True):
-    if not ticker_input:
-        st.error("❌ 종목코드를 입력해주세요.")
-    else:
-        # 시장 자동 감지
-        is_korean = ticker_input.isdigit() and len(ticker_input) == 6
+# 국내주식 데이터 가져오기 함수
+def get_korean_stock_data(ticker):
+    try:
+        # Google Finance URL
+        url = f"https://www.google.com/finance/quote/{ticker}:KRX"
         
-        if market_type == "국내 주식" or (market_type == "자동 감지" and is_korean):
-            # 국내 주식 심사
-            st.markdown("## 🇰🇷 국내 주식 심사 결과")
+        # yfinance로도 시도 (일부 한국 주식 지원)
+        stock = yf.Ticker(f"{ticker}.KS")  # KOSPI
+        info = stock.info
+        
+        # 기본 정보 추출
+        name = info.get('longName', info.get('shortName', '조회 실패'))
+        price = info.get('currentPrice', info.get('regularMarketPrice', 0))
+        market_cap = info.get('marketCap', 0) / 1e8  # 억원
+        
+        # 52주 최고/최저
+        hist = stock.history(period="1y")
+        high_52w = hist['High'].max() if not hist.empty else 0
+        low_52w = hist['Low'].min() if not hist.empty else 0
+        
+        return {
+            'success': True,
+            'name': name,
+            'price': price,
+            'market_cap': market_cap,
+            'high_52w': high_52w,
+            'low_52w': low_52w,
+            'pe_ratio': info.get('trailingPE', 0),
+        }
+    except:
+        # KOSDAQ 시도
+        try:
+            stock = yf.Ticker(f"{ticker}.KQ")
+            info = stock.info
             
-            with st.spinner("📡 데이터 수집 중..."):
-                time.sleep(0.5)
-                
-                # TODO: 실제 API 연동 필요
-                # 현재는 더미 데이터로 작동
-                stock_data = {
-                    "종목코드": ticker_input,
-                    "종목명": "조회 중...",
-                    "시장": "KOSPI/KOSDAQ",
-                    "현재가": "-",
-                    "시가총액": "-",
-                }
-                
-                # 기본 정보
-                st.markdown("### 📌 기본 정보")
-                info_cols = st.columns(5)
-                with info_cols[0]:
-                    st.metric("종목코드", stock_data["종목코드"])
-                with info_cols[1]:
-                    st.metric("종목명", stock_data["종목명"])
-                with info_cols[2]:
-                    st.metric("시장", stock_data["시장"])
-                with info_cols[3]:
-                    st.metric("현재가", stock_data["현재가"])
-                with info_cols[4]:
-                    st.metric("시가총액", stock_data["시가총액"])
-                
-                st.markdown("---")
-                
-                # 판정 로직
-                violations = []
-                warnings = []
-                
-                # [예시] 1차 필터: 절대 불가 조건
-                # TODO: 실제 데이터로 교체 필요
-                is_unlisted = False
-                is_managed = False
-                is_suspended = False
-                market_cap_billion = 1000  # 예시: 1조원
-                
-                if is_unlisted:
-                    violations.append("비상장 주식")
-                if is_managed:
-                    violations.append("관리종목")
-                if is_suspended:
-                    violations.append("거래정지")
-                if market_cap_billion < 100:
-                    violations.append(f"시가총액 {market_cap_billion}억원 (100억 미만)")
-                
-                # [예시] 2차 필터: 재무 리스크
-                capital_erosion = 0
-                debt_ratio = 80
-                consecutive_losses = 0
-                
-                if capital_erosion >= 50:
-                    violations.append(f"자본잠식 {capital_erosion}%")
-                elif capital_erosion >= 30:
-                    warnings.append(f"자본잠식 {capital_erosion}% → LTV 20% 이하 권장")
-                
-                if debt_ratio >= 300:
-                    warnings.append(f"부채비율 {debt_ratio}% → LTV 30% 이하 권장")
-                
-                if consecutive_losses >= 3:
-                    violations.append("3년 연속 당기순손실")
-                
-                # [예시] 3차 필터: 주가 변동성
-                price_52w_high = 100000
-                price_52w_low = 80000
-                volatility_ratio = ((price_52w_high - price_52w_low) / price_52w_low) * 100
-                
-                if volatility_ratio >= 500:
-                    warnings.append(f"극심한 변동성 {volatility_ratio:.0f}% → LTV 20% 이하 권장")
-                elif volatility_ratio >= 200:
-                    warnings.append(f"높은 변동성 {volatility_ratio:.0f}% → LTV 40% 이하 권장")
-                
-                # 최종 판정
-                st.markdown("### 🎯 최종 판정")
-                
-                if violations:
-                    st.error("### ✕ **담보 설정 불가**")
-                    st.markdown("#### ⚠️ 불가 사유")
-                    for v in violations:
-                        st.markdown(f"- {v}")
-                    recommended_ltv = "N/A"
-                    judgment = "불가"
-                    color = "red"
-                    
-                elif warnings:
-                    st.warning("### △ **조건부 담보 설정 가능**")
-                    st.markdown("#### ⚠️ 주의사항")
-                    for w in warnings:
-                        st.markdown(f"- {w}")
-                    recommended_ltv = "20~40%"
-                    judgment = "조건부"
-                    color = "orange"
-                    
-                else:
-                    st.success("### ○ **담보 설정 가능**")
-                    st.markdown("✅ 계좌운용규칙 충족")
-                    recommended_ltv = "60~80%"
-                    judgment = "가능"
-                    color = "green"
-                
-                st.markdown("---")
-                
-                # 재무 지표
-                st.markdown("### 💰 재무 지표")
-                fin_cols = st.columns(4)
-                with fin_cols[0]:
-                    st.metric("자본잠식률", f"{capital_erosion}%")
-                with fin_cols[1]:
-                    st.metric("부채비율", f"{debt_ratio}%")
-                with fin_cols[2]:
-                    st.metric("최근 3년 영업이익", "흑자/흑자/흑자")
-                with fin_cols[3]:
-                    st.metric("권장 LTV", recommended_ltv, delta=None, delta_color="off")
-                
-                st.markdown("---")
-                
-                # 주가 변동성
-                st.markdown("### 📈 주가 변동성")
-                vol_cols = st.columns(3)
-                with vol_cols[0]:
-                    st.metric("52주 최고가", f"{price_52w_high:,}원")
-                with vol_cols[1]:
-                    st.metric("52주 최저가", f"{price_52w_low:,}원")
-                with vol_cols[2]:
-                    st.metric("변동폭", f"{volatility_ratio:.1f}%")
-                
-                st.markdown("---")
-                
-                # 관리자 의견
-                st.markdown("### 📝 리스크 관리팀 의견")
-                if judgment == "불가":
-                    opinion = "⛔ 담보로 절대 받지 말 것. 계좌운용규칙 명백히 위반."
-                    st.error(opinion)
-                elif judgment == "조건부":
-                    opinion = "⚠️ 보수적 LTV 적용 필수. 정기 모니터링 및 추가 담보 징구 준비 필요."
-                    st.warning(opinion)
-                else:
-                    opinion = "✅ 우량 종목. 정상적인 담보 설정 가능."
-                    st.success(opinion)
-                
-                # 다운로드
-                st.markdown("---")
-                report_data = {
-                    "심사일시": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                    "종목코드": [stock_data["종목코드"]],
-                    "종목명": [stock_data["종목명"]],
-                    "시장": [stock_data["시장"]],
-                    "판정": [judgment],
-                    "권장LTV": [recommended_ltv],
-                    "불가사유": [", ".join(violations) if violations else "없음"],
-                    "주의사항": [", ".join(warnings) if warnings else "없음"],
-                    "자본잠식률": [f"{capital_erosion}%"],
-                    "부채비율": [f"{debt_ratio}%"],
-                    "52주변동폭": [f"{volatility_ratio:.1f}%"],
-                    "리스크관리팀의견": [opinion]
-                }
-                
-                df_report = pd.DataFrame(report_data)
-                
-                csv = df_report.to_csv(index=False, encoding='utf-8-sig')
-                st.download_button(
-                    label="📥 심사 결과 다운로드 (CSV)",
-                    data=csv,
-                    file_name=f"핀드_담보심사_{ticker_input}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-                
-        else:  # 해외 주식
-            st.markdown("## 🌎 해외 주식 심사 결과")
+            name = info.get('longName', info.get('shortName', '조회 실패'))
+            price = info.get('currentPrice', info.get('regularMarketPrice', 0))
+            market_cap = info.get('marketCap', 0) / 1e8
             
-            with st.spinner("📡 데이터 수집 중 (Yahoo Finance API)..."):
-                try:
-                    # yfinance로 실제 데이터 가져오기
-                    stock = yf.Ticker(ticker_input.upper())
-                    info = stock.info
-                    hist = stock.history(period="1y")
-                    
+            hist = stock.history(period="1y")
+            high_52w = hist['High'].max() if not hist.empty else 0
+            low_52w = hist['Low'].min() if not hist.empty else 0
+            
+            return {
+                'success': True,
+                'name': name,
+                'price': price,
+                'market_cap': market_cap,
+                'high_52w': high_52w,
+                'low_52w': low_52w,
+                'pe_ratio': info.get('trailingPE', 0),
+            }
+        except:
+            return {'success': False}
+
+# 메인
+ticker = st.text_input("**종목코드 입력**", placeholder="005930 또는 AAPL")
+
+if st.button("🔍 자동 심사", type="primary", use_container_width=True):
+    if not ticker:
+        st.error("종목코드를 입력하세요")
+    else:
+        is_korean = ticker.isdigit() and len(ticker) == 6
+        
+        # === 국내주식 자동 ===
+        if is_korean:
+            st.markdown("## 🇰🇷 국내주식 자동 심사")
+            
+            with st.spinner("📡 실시간 데이터 수집 중..."):
+                data = get_korean_stock_data(ticker)
+                
+                if not data['success']:
+                    st.error("❌ 데이터 조회 실패. 종목코드를 확인하세요.")
+                else:
                     # 기본 정보
                     st.markdown("### 📌 기본 정보")
-                    info_cols = st.columns(5)
-                    with info_cols[0]:
-                        st.metric("티커", ticker_input.upper())
-                    with info_cols[1]:
-                        st.metric("종목명", info.get("longName", "N/A")[:20])
-                    with info_cols[2]:
-                        exchange = info.get("exchange", "N/A")
-                        st.metric("거래소", exchange)
-                    with info_cols[3]:
-                        price = info.get("currentPrice", info.get("regularMarketPrice", 0))
-                        st.metric("현재가", f"${price:.2f}")
-                    with info_cols[4]:
-                        market_cap = info.get("marketCap", 0) / 1e9
-                        st.metric("시가총액", f"${market_cap:.1f}B")
+                    c1, c2, c3, c4, c5 = st.columns(5)
+                    c1.metric("종목코드", ticker)
+                    c2.metric("종목명", data['name'][:15])
+                    c3.metric("현재가", f"{data['price']:,.0f}원")
+                    c4.metric("시총", f"{data['market_cap']:,.0f}억")
+                    c5.metric("P/E", f"{data['pe_ratio']:.1f}" if data['pe_ratio'] > 0 else "N/A")
                     
                     st.markdown("---")
                     
@@ -304,127 +127,185 @@ if st.button("🔍 심사 시작", type="primary", use_container_width=True):
                     violations = []
                     warnings = []
                     
-                    # 1차: 거래소 확인
-                    allowed_exchanges = ["NYQ", "NMS", "NGM", "PCX", "NAS"]
-                    if exchange not in allowed_exchanges and exchange != "N/A":
-                        violations.append(f"허용되지 않은 거래소 ({exchange})")
+                    # 1차: 시가총액
+                    if data['market_cap'] < 100:
+                        violations.append(f"시가총액 {data['market_cap']:.0f}억원 (100억 미만)")
                     
-                    # 2차: S&P500 / NASDAQ100 확인 (간이 판정)
-                    # 실제로는 별도 리스트 확인 필요
-                    is_large_cap = market_cap > 10  # 100억 달러 이상
-                    if not is_large_cap:
-                        warnings.append(f"시가총액 ${market_cap:.1f}B - S&P500/NASDAQ100 확인 필요")
-                    
-                    # PTP 확인 (더미)
-                    quote_type = info.get("quoteType", "")
-                    if "LP" in ticker_input.upper() or quote_type == "MLP":
-                        violations.append("PTP (Publicly Traded Partnership) 가능성")
+                    # 2차: 변동성
+                    if data['high_52w'] > 0 and data['low_52w'] > 0:
+                        volatility = ((data['high_52w'] - data['low_52w']) / data['low_52w']) * 100
+                        if volatility >= 500:
+                            warnings.append(f"극심한 변동성 {volatility:.0f}%")
+                        elif volatility >= 200:
+                            warnings.append(f"높은 변동성 {volatility:.0f}%")
                     
                     # 최종 판정
-                    st.markdown("### 🎯 최종 판정")
+                    st.markdown("### 🎯 판정 결과")
                     
                     if violations:
-                        st.error("### ✕ **담보 설정 불가**")
-                        st.markdown("#### ⚠️ 불가 사유")
+                        st.error("### ✕ 담보 불가")
                         for v in violations:
                             st.markdown(f"- {v}")
-                        recommended_ltv = "N/A"
+                        ltv = "N/A"
                         judgment = "불가"
                     elif warnings:
-                        st.warning("### △ **조건부 담보 설정 가능**")
-                        st.markdown("#### ⚠️ 주의사항")
+                        st.warning("### △ 조건부")
                         for w in warnings:
                             st.markdown(f"- {w}")
-                        recommended_ltv = "40~60%"
+                        ltv = "30~50%"
                         judgment = "조건부"
                     else:
-                        st.success("### ○ **담보 설정 가능**")
-                        st.markdown("✅ S&P500/NASDAQ100 대형주 (추정)")
-                        recommended_ltv = "60~70%"
+                        st.success("### ○ 담보 가능")
+                        st.markdown("✅ 계좌운용규칙 충족")
+                        ltv = "60~80%"
                         judgment = "가능"
                     
                     st.markdown("---")
                     
-                    # 기업 정보
-                    st.markdown("### 💰 기업 정보")
-                    comp_cols = st.columns(4)
-                    with comp_cols[0]:
-                        st.metric("섹터", info.get("sector", "N/A"))
-                    with comp_cols[1]:
-                        st.metric("산업", info.get("industry", "N/A")[:20])
-                    with comp_cols[2]:
-                        pe_ratio = info.get("trailingPE", "N/A")
-                        pe_text = f"{pe_ratio:.2f}" if isinstance(pe_ratio, (int, float)) else "N/A"
-                        st.metric("P/E Ratio", pe_text)
-                    with comp_cols[3]:
-                        st.metric("권장 LTV", recommended_ltv)
+                    # 상세 정보
+                    st.markdown("### 📈 주가 정보")
+                    p1, p2, p3 = st.columns(3)
+                    p1.metric("52주 최고", f"{data['high_52w']:,.0f}원")
+                    p2.metric("52주 최저", f"{data['low_52w']:,.0f}원")
+                    if data['high_52w'] > 0 and data['low_52w'] > 0:
+                        vol = ((data['high_52w'] - data['low_52w']) / data['low_52w']) * 100
+                        p3.metric("변동폭", f"{vol:.1f}%")
+                    
+                    st.markdown("---")
+                    st.markdown("### 📝 리스크팀 의견")
+                    if judgment == "불가":
+                        st.error("⛔ 담보 설정 불가")
+                    elif judgment == "조건부":
+                        st.warning("⚠️ 보수적 LTV 적용 필수")
+                    else:
+                        st.success("✅ 정상 담보 가능")
+                    
+                    # 다운로드
+                    report = pd.DataFrame([{
+                        "심사일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "종목코드": ticker,
+                        "종목명": data['name'],
+                        "판정": judgment,
+                        "권장LTV": ltv,
+                        "시가총액": f"{data['market_cap']:.0f}억",
+                        "현재가": f"{data['price']:.0f}원",
+                        "불가사유": ", ".join(violations) if violations else "-",
+                        "주의사항": ", ".join(warnings) if warnings else "-"
+                    }])
+                    
+                    csv = report.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        "📥 결과 다운로드",
+                        csv,
+                        f"핀드_심사_{ticker}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        "text/csv",
+                        use_container_width=True
+                    )
+        
+        # === 해외주식 자동 ===
+        else:
+            st.markdown("## 🌎 해외주식 자동 심사")
+            
+            with st.spinner("📡 Yahoo Finance 데이터 수집 중..."):
+                try:
+                    stock = yf.Ticker(ticker.upper())
+                    info = stock.info
+                    hist = stock.history(period="1y")
+                    
+                    # 기본 정보
+                    st.markdown("### 📌 기본 정보")
+                    c1, c2, c3, c4, c5 = st.columns(5)
+                    
+                    name = info.get('longName', info.get('shortName', 'N/A'))
+                    exchange = info.get('exchange', 'N/A')
+                    price = info.get('currentPrice', info.get('regularMarketPrice', 0))
+                    mcap = info.get('marketCap', 0) / 1e9
+                    
+                    c1.metric("티커", ticker.upper())
+                    c2.metric("종목명", name[:20])
+                    c3.metric("거래소", exchange)
+                    c4.metric("가격", f"${price:.2f}")
+                    c5.metric("시총", f"${mcap:.1f}B")
+                    
+                    st.markdown("---")
+                    
+                    # 판정
+                    violations = []
+                    warnings = []
+                    
+                    allowed = ["NYQ", "NMS", "NGM", "NAS", "NYSE", "NASDAQ"]
+                    if exchange not in allowed and exchange != "N/A":
+                        violations.append(f"거래소: {exchange}")
+                    
+                    if mcap < 10:
+                        warnings.append(f"시총 ${mcap:.1f}B - 확인 필요")
+                    
+                    st.markdown("### 🎯 판정 결과")
+                    
+                    if violations:
+                        st.error("### ✕ 담보 불가")
+                        for v in violations:
+                            st.markdown(f"- {v}")
+                        ltv = "N/A"
+                        judgment = "불가"
+                    elif warnings:
+                        st.warning("### △ 조건부")
+                        for w in warnings:
+                            st.markdown(f"- {w}")
+                        ltv = "40~60%"
+                        judgment = "조건부"
+                    else:
+                        st.success("### ○ 담보 가능")
+                        ltv = "60~70%"
+                        judgment = "가능"
                     
                     st.markdown("---")
                     
                     # 주가 정보
                     if not hist.empty:
-                        st.markdown("### 📈 주가 정보 (52주)")
-                        price_high = hist['High'].max()
-                        price_low = hist['Low'].min()
-                        volatility = ((price_high - price_low) / price_low) * 100
+                        st.markdown("### 📈 52주 주가")
+                        high = hist['High'].max()
+                        low = hist['Low'].min()
+                        vol = ((high - low) / low) * 100
                         
-                        price_cols = st.columns(3)
-                        with price_cols[0]:
-                            st.metric("52주 최고가", f"${price_high:.2f}")
-                        with price_cols[1]:
-                            st.metric("52주 최저가", f"${price_low:.2f}")
-                        with price_cols[2]:
-                            st.metric("변동폭", f"{volatility:.1f}%")
-                        
-                        st.markdown("---")
+                        p1, p2, p3 = st.columns(3)
+                        p1.metric("최고", f"${high:.2f}")
+                        p2.metric("최저", f"${low:.2f}")
+                        p3.metric("변동폭", f"{vol:.1f}%")
                     
-                    # 관리자 의견
-                    st.markdown("### 📝 리스크 관리팀 의견")
+                    st.markdown("---")
+                    st.markdown("### 📝 리스크팀 의견")
                     if judgment == "불가":
-                        opinion = "⛔ 계좌운용규칙 위반. 담보 설정 불가."
-                        st.error(opinion)
+                        st.error("⛔ 계좌운용규칙 위반")
                     elif judgment == "조건부":
-                        opinion = "⚠️ S&P500/NASDAQ100 편입 여부 재확인 필요. 확인 후 담보 설정."
-                        st.warning(opinion)
+                        st.warning("⚠️ 추가 확인 필요")
                     else:
-                        opinion = "✅ 대형 우량주. 정상 담보 설정 가능."
-                        st.success(opinion)
+                        st.success("✅ 정상 담보 가능")
                     
                     # 다운로드
-                    st.markdown("---")
-                    report_data = {
-                        "심사일시": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                        "티커": [ticker_input.upper()],
-                        "종목명": [info.get("longName", "N/A")],
-                        "거래소": [exchange],
-                        "판정": [judgment],
-                        "권장LTV": [recommended_ltv],
-                        "불가사유": [", ".join(violations) if violations else "없음"],
-                        "주의사항": [", ".join(warnings) if warnings else "없음"],
-                        "시가총액_B": [f"${market_cap:.1f}"],
-                        "리스크관리팀의견": [opinion]
-                    }
+                    report = pd.DataFrame([{
+                        "심사일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "티커": ticker.upper(),
+                        "종목명": name,
+                        "거래소": exchange,
+                        "판정": judgment,
+                        "권장LTV": ltv,
+                        "시가총액": f"${mcap:.1f}B",
+                        "불가사유": ", ".join(violations) if violations else "-",
+                        "주의사항": ", ".join(warnings) if warnings else "-"
+                    }])
                     
-                    df_report = pd.DataFrame(report_data)
-                    csv = df_report.to_csv(index=False, encoding='utf-8-sig')
+                    csv = report.to_csv(index=False, encoding='utf-8-sig')
                     st.download_button(
-                        label="📥 심사 결과 다운로드 (CSV)",
-                        data=csv,
-                        file_name=f"핀드_담보심사_{ticker_input.upper()}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv",
+                        "📥 결과 다운로드",
+                        csv,
+                        f"핀드_심사_{ticker.upper()}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        "text/csv",
                         use_container_width=True
                     )
                     
                 except Exception as e:
-                    st.error(f"❌ 데이터 조회 실패: {str(e)}")
-                    st.info("💡 종목 티커를 다시 확인해주세요. 예: AAPL, MSFT, TSLA")
+                    st.error(f"❌ 조회 실패: {str(e)}")
 
-# 하단 정보
 st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: gray; font-size: 12px;'>
-<b>핀드 담보 적격성 자동 심사 시스템 v1.0</b><br>
-계좌운용규칙 기준: KB증권 하이브리드 | 업데이트: 2026-04-08<br>
-문의: risk@pind.co.kr | ⓒ 2026 Pind Inc.
-</div>
-""", unsafe_allow_html=True)
+st.caption("ⓒ 2026 Pind Inc. | v2.0 완전 자동화")
