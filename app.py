@@ -320,108 +320,210 @@ if search_button:
         is_korean = ticker.isdigit() and len(ticker) == 6
         
         # === 국내주식 ===
-        if is_korean:
-            st.markdown("## 🇰🇷 국내주식 심사")
+
+if is_korean:
+    st.markdown("## 🇰🇷 국내주식 심사")
+    
+    with st.spinner("데이터 수집 중..."):
+        data_source = None
+        stock_data = None
+        
+        # 1차 시도: FinanceDataReader (KRX)
+        try:
+            df_krx = fdr.StockListing('KRX')
+            stock_info = df_krx[df_krx['Code'] == ticker]
             
-            with st.spinner("데이터 수집 중..."):
-                try:
-                    df_krx = fdr.StockListing('KRX')
-                    stock_info = df_krx[df_krx['Code'] == ticker]
+            if not stock_info.empty:
+                name = stock_info.iloc[0]['Name']
+                market = stock_info.iloc[0]['Market']
+                market_cap = stock_info.iloc[0].get('Marcap', 0) / 100000000
+                
+                df_price = fdr.DataReader(ticker, '2024-01-01')
+                
+                if not df_price.empty:
+                    data_source = "KRX (FinanceDataReader)"
+                    stock_data = {
+                        'name': name,
+                        'market': market,
+                        'market_cap': market_cap,
+                        'dept': stock_info.iloc[0].get('Dept', ''),
+                        'price_data': df_price
+                    }
+        except Exception as e:
+            st.warning(f"⚠️ KRX 데이터 접근 실패 - 백업 소스 시도 중...")
+        
+        # 2차 시도: yfinance 한국 주식 (백업)
+        if not stock_data:
+            try:
+                # KOSPI 시도
+                stock_ks = yf.Ticker(f"{ticker}.KS")
+                info_ks = stock_ks.info
+                
+                if info_ks and info_ks.get('regularMarketPrice'):
+                    hist = stock_ks.history(period="1y")
+                    data_source = "Yahoo Finance (KOSPI)"
                     
-                    if stock_info.empty:
-                        st.error(f"❌ 종목코드 {ticker}를 찾을 수 없습니다.")
-                    else:
-                        name = stock_info.iloc[0]['Name']
-                        market = stock_info.iloc[0]['Market']
-                        market_cap = stock_info.iloc[0].get('Marcap', 0) / 100000000
-                        
-                        df_price = fdr.DataReader(ticker, '2024-01-01')
-                        
-                        if df_price.empty:
-                            st.error("❌ 주가 데이터를 가져올 수 없습니다.")
-                        else:
-                            current_price = df_price['Close'].iloc[-1]
-                            high_52w = df_price['High'].max()
-                            low_52w = df_price['Low'].min()
-                            
-                            volatility = 0
-                            if high_52w > 0 and low_52w > 0:
-                                volatility = ((high_52w - low_52w) / low_52w) * 100
-                            
-                            # 기본 정보
-                            st.markdown("### 📌 기본 정보")
-                            
-                            col1, col2, col3, col4 = st.columns(4)
-                            col1.metric("종목명", name)
-                            col2.metric("시장", market)
-                            col3.metric("현재가", f"{current_price:,.0f}원")
-                            col4.metric("시총", f"{market_cap:,.0f}억")
-                            
-                            st.markdown("---")
-                            
-                            # 판정 로직
-                            violations = []
-                            warnings = []
-                            
-                            if stock_info.iloc[0].get('Dept', '') == '관리':
-                                violations.append("관리종목 지정")
-                            
-                            if market_cap < 100:
-                                violations.append(f"시가총액 {market_cap:,.0f}억원 (기준: 100억 이상)")
-                            
-                            if volatility >= 500:
-                                warnings.append(f"극심한 변동성 {volatility:.0f}%")
-                            elif volatility >= 200:
-                                warnings.append(f"높은 변동성 {volatility:.0f}%")
-                            
-                            # 판정 결과
-                            st.markdown("---")
-                            
-                            data = {
-                                'market_cap': market_cap,
-                                'market': market,
-                                'price': current_price,
-                                'volatility': volatility
-                            }
-                            
-                            if violations:
-                                st.error("⛔ **담보 인정 불가**")
-                                judgment = "불가"
-                                opinion = generate_rejection_opinion(violations, data, True)
-                                st.markdown(opinion)
-                            elif warnings:
-                                st.warning("⚠️ **조건부 담보 인정 (고위험)**")
-                                judgment = "조건부"
-                                opinion = generate_conditional_opinion(warnings, data, True)
-                                st.markdown(opinion)
-                            else:
-                                st.success("✅ **담보 인정 가능**")
-                                judgment = "가능"
-                                opinion = generate_approval_opinion(data, True)
-                                st.markdown(opinion)
-                            
-                            # 다운로드
-                            st.markdown("---")
-                            report = pd.DataFrame([{
-                                "심사일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                "종목코드": ticker,
-                                "종목명": name,
-                                "판정": judgment,
-                                "시가총액": f"{market_cap:,.0f}억",
-                                "현재가": f"{current_price:,.0f}원",
-                                "변동성": f"{volatility:.1f}%"
-                            }])
-                            
-                            csv = report.to_csv(index=False, encoding='utf-8-sig')
-                            st.download_button(
-                                "📥 심사결과 다운로드",
-                                csv,
-                                f"심사_{ticker}_{datetime.now().strftime('%Y%m%d')}.csv",
-                                use_container_width=True
-                            )
+                    market_cap_raw = info_ks.get('marketCap', 0)
+                    market_cap = market_cap_raw / 100000000 if market_cap_raw else 0
                     
-                except Exception as e:
-                    st.error(f"❌ 오류: {str(e)}")
+                    stock_data = {
+                        'name': info_ks.get('shortName', ticker),
+                        'market': 'KOSPI',
+                        'market_cap': market_cap,
+                        'dept': '',
+                        'price_data': hist
+                    }
+                else:
+                    # KOSDAQ 시도
+                    stock_kq = yf.Ticker(f"{ticker}.KQ")
+                    info_kq = stock_kq.info
+                    
+                    if info_kq and info_kq.get('regularMarketPrice'):
+                        hist = stock_kq.history(period="1y")
+                        data_source = "Yahoo Finance (KOSDAQ)"
+                        
+                        market_cap_raw = info_kq.get('marketCap', 0)
+                        market_cap = market_cap_raw / 100000000 if market_cap_raw else 0
+                        
+                        stock_data = {
+                            'name': info_kq.get('shortName', ticker),
+                            'market': 'KOSDAQ',
+                            'market_cap': market_cap,
+                            'dept': '',
+                            'price_data': hist
+                        }
+                
+                if stock_data:
+                    st.info(f"ℹ️ 데이터 소스: {data_source} (백업)")
+                    
+            except Exception as e:
+                pass
+        
+        # 모든 소스에서 실패
+        if not stock_data:
+            st.error(f"❌ 종목코드 {ticker}의 데이터를 가져올 수 없습니다.")
+            st.info("💡 잠시 후 다시 시도하거나, 종목코드를 확인해주세요.")
+            
+            with st.expander("🔧 문제 해결 방법"):
+                st.markdown("""
+                **가능한 원인:**
+                1. KRX 서버 일시적 오류
+                2. 잘못된 종목코드
+                3. 네트워크 연결 문제
+                
+                **해결 방법:**
+                - 5-10분 후 재시도
+                - 종목코드 6자리 확인 (예: 005930)
+                - 다른 종목으로 먼저 테스트
+                """)
+        
+        else:
+            try:
+                name = stock_data['name']
+                market = stock_data['market']
+                market_cap = stock_data['market_cap']
+                dept = stock_data['dept']
+                df_price = stock_data['price_data']
+                
+                current_price = df_price['Close'].iloc[-1]
+                high_52w = df_price['High'].max()
+                low_52w = df_price['Low'].min()
+                
+                volatility = 0
+                if high_52w > 0 and low_52w > 0:
+                    volatility = ((high_52w - low_52w) / low_52w) * 100
+                
+                # 기본 정보
+                st.markdown("### 📌 기본 정보")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("종목명", name)
+                col2.metric("시장", market)
+                col3.metric("현재가", f"{current_price:,.0f}원")
+                col4.metric("시총", f"{market_cap:,.0f}억" if market_cap > 0 else "-")
+                
+                st.markdown("---")
+                
+                # 판정 로직
+                violations = []
+                warnings = []
+                
+                # 관리종목 체크 (KRX 데이터에만 있음)
+                if dept == '관리':
+                    violations.append("관리종목 지정")
+                
+                # 시가총액 (백업 소스에서는 0일 수 있음)
+                if market_cap > 0 and market_cap < 100:
+                    violations.append(f"시가총액 {market_cap:,.0f}억원 (기준: 100억 이상)")
+                elif market_cap == 0:
+                    warnings.append("시가총액 정보 없음 (수동 확인 필요)")
+                
+                # 변동성
+                if volatility >= 500:
+                    warnings.append(f"극심한 변동성 {volatility:.0f}%")
+                elif volatility >= 200:
+                    warnings.append(f"높은 변동성 {volatility:.0f}%")
+                
+                # 백업 소스 사용 시 추가 경고
+                if data_source and "Yahoo" in data_source:
+                    warnings.append("관리종목 여부 확인 필요 (백업 데이터)")
+                
+                # 판정 결과
+                st.markdown("---")
+                
+                data = {
+                    'market_cap': market_cap,
+                    'market': market,
+                    'price': current_price,
+                    'volatility': volatility
+                }
+                
+                if violations:
+                    st.error("⛔ **담보 인정 불가**")
+                    judgment = "불가"
+                    opinion = generate_rejection_opinion(violations, data, True)
+                    st.markdown(opinion)
+                elif warnings:
+                    st.warning("⚠️ **조건부 담보 인정 (고위험)**")
+                    judgment = "조건부"
+                    opinion = generate_conditional_opinion(warnings, data, True)
+                    st.markdown(opinion)
+                else:
+                    st.success("✅ **담보 인정 가능**")
+                    judgment = "가능"
+                    opinion = generate_approval_opinion(data, True)
+                    st.markdown(opinion)
+                
+                # 데이터 소스 표시
+                if data_source:
+                    st.caption(f"📊 데이터 출처: {data_source}")
+                
+                # 다운로드
+                st.markdown("---")
+                report = pd.DataFrame([{
+                    "심사일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "종목코드": ticker,
+                    "종목명": name,
+                    "시장": market,
+                    "판정": judgment,
+                    "시가총액": f"{market_cap:,.0f}억" if market_cap > 0 else "-",
+                    "현재가": f"{current_price:,.0f}원",
+                    "변동성": f"{volatility:.1f}%",
+                    "데이터소스": data_source
+                }])
+                
+                csv = report.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    "📥 심사결과 다운로드",
+                    csv,
+                    f"심사_{ticker}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    use_container_width=True
+                )
+                
+            except Exception as e:
+                st.error(f"❌ 데이터 처리 중 오류 발생")
+                with st.expander("상세 오류 정보"):
+                    st.code(str(e))
         
         # === 해외주식 ===
 # === 해외주식 === (전체 교체)
