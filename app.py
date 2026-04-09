@@ -424,65 +424,95 @@ if search_button:
                     st.error(f"❌ 오류: {str(e)}")
         
         # === 해외주식 ===
+# === 해외주식 === (전체 교체)
+
 else:
     st.markdown("## 🌎 해외주식 심사")
     
     with st.spinner("데이터 수집 중..."):
+        data_source = None
+        stock_data = None
+        
+        # 1차 시도: yfinance
         try:
-            # yfinance 호출 시 재시도 로직
             import time
-            max_retries = 3
-            retry_count = 0
-            success = False
+            stock = yf.Ticker(ticker.upper())
+            info = stock.info
             
-            while retry_count < max_retries and not success:
-                try:
-                    stock = yf.Ticker(ticker.upper())
-                    info = stock.info
-                    
-                    # 데이터가 제대로 왔는지 확인
-                    if info and len(info) > 5:
-                        success = True
-                    else:
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            time.sleep(2)  # 2초 대기
-                except:
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        time.sleep(2)
-            
-            if not success:
-                st.error("❌ Yahoo Finance에서 데이터를 가져올 수 없습니다.")
-                st.info("💡 잠시 후 다시 시도해주세요. (API 요청 제한)")
-            else:
+            # 데이터 유효성 확인
+            if info and len(info) > 5 and info.get('regularMarketPrice'):
                 hist = stock.history(period="1y")
+                data_source = "Yahoo Finance"
+                stock_data = {
+                    'source': 'yfinance',
+                    'name': info.get('longName', info.get('shortName', ticker.upper())),
+                    'exchange': info.get('exchange', 'N/A'),
+                    'price': info.get('currentPrice', info.get('regularMarketPrice', 0)),
+                    'quote_type': info.get('quoteType', ''),
+                    'mcap_value': info.get('totalAssets', 0) if info.get('quoteType') == 'ETF' else info.get('marketCap', 0),
+                    'hist': hist
+                }
+        except Exception as e:
+            st.warning(f"⚠️ Yahoo Finance 접근 실패 - 백업 소스 시도 중...")
+            time.sleep(1)
+        
+        # 2차 시도: FinanceDataReader (백업)
+        if not stock_data:
+            try:
+                df_price = fdr.DataReader(ticker.upper(), '2024-01-01')
                 
-                name = info.get('longName', info.get('shortName', ticker.upper()))
-                exchange_raw = info.get('exchange', 'N/A')
-                price = info.get('currentPrice', info.get('regularMarketPrice', 0))
+                if not df_price.empty:
+                    data_source = "FinanceDataReader"
+                    current_price = df_price['Close'].iloc[-1]
+                    
+                    stock_data = {
+                        'source': 'fdr',
+                        'name': ticker.upper(),
+                        'exchange': 'Unknown',
+                        'price': current_price,
+                        'quote_type': '',
+                        'mcap_value': 0,
+                        'hist': df_price
+                    }
+                    
+                    st.info(f"ℹ️ 데이터 소스: {data_source} (백업)")
+            except Exception as e:
+                pass
+        
+        # 데이터를 못 가져온 경우
+        if not stock_data:
+            st.error("❌ 모든 데이터 소스에서 조회 실패")
+            st.info("💡 잠시 후 다시 시도하거나, 티커를 확인해주세요.")
+        
+        else:
+            try:
+                # 공통 데이터 추출
+                name = stock_data['name']
+                exchange_raw = stock_data['exchange']
+                price = stock_data['price']
+                quote_type = stock_data['quote_type']
+                mcap_value = stock_data['mcap_value']
+                hist = stock_data['hist']
                 
-                quote_type = info.get('quoteType', '')
-                
+                # ETF/주식 구분
                 if quote_type == 'ETF':
-                    mcap_value = info.get('totalAssets', 0)
                     mcap_label = "AUM"
                     stock_type = "ETF"
                 else:
-                    mcap_value = info.get('marketCap', 0)
                     mcap_label = "시총"
                     stock_type = "주식"
                 
                 mcap = mcap_value / 1e9 if mcap_value else 0
                 
+                # 거래소 매핑
                 exchange_map = {
                     'NYQ': 'NYSE', 'NMS': 'NASDAQ', 'NGM': 'NASDAQ',
                     'NAS': 'NASDAQ', 'PCX': 'NYSE Arca', 'NYSEARCA': 'NYSE Arca'
                 }
                 exchange = exchange_map.get(exchange_raw, exchange_raw)
                 
-                # 변동성
-                if not hist.empty:
+                # 변동성 계산
+                if not hist.empty and len(hist) > 0:
                     high = hist['High'].max()
                     low = hist['Low'].min()
                     vol = ((high - low) / low) * 100 if low > 0 else 0
@@ -496,39 +526,61 @@ else:
                 
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("종목명", name[:15])
-                col2.metric("거래소", exchange)
+                
+                # 거래소 정보 (FDR은 Unknown 가능)
+                if exchange != "Unknown":
+                    col2.metric("거래소", exchange)
+                else:
+                    col2.metric("거래소", "-")
+                
                 col3.metric("가격", f"${price:.2f}")
-                col4.metric(mcap_label, f"${mcap:.1f}B")
+                
+                # 시총/AUM (데이터 있을 때만)
+                if mcap > 0:
+                    col4.metric(mcap_label, f"${mcap:.1f}B")
+                else:
+                    col4.metric(mcap_label, "-")
                 
                 st.markdown("---")
                 
+                # 판정 로직
                 violations = []
                 warnings = []
                 
-                allowed = ["NYSE", "NASDAQ", "NYSE Arca"]
-                if exchange not in allowed and exchange != "N/A":
-                    violations.append(f"비허용 거래소: {exchange}")
-                if "OTC" in exchange.upper():
-                    violations.append("OTC 장외시장")
+                # 거래소 체크 (데이터가 있을 때만)
+                if exchange != "Unknown" and exchange != "N/A":
+                    allowed = ["NYSE", "NASDAQ", "NYSE Arca"]
+                    if exchange not in allowed:
+                        violations.append(f"비허용 거래소: {exchange}")
+                    if "OTC" in exchange.upper():
+                        violations.append("OTC 장외시장")
                 
-                if quote_type != "ETF" and quote_type in ["MLP", "ETP"]:
-                    violations.append("PTP 구조")
+                # PTP 체크 (yfinance에서만)
+                if stock_data['source'] == 'yfinance':
+                    if quote_type != "ETF" and quote_type in ["MLP", "ETP"]:
+                        violations.append("PTP 구조")
                 
-                if mcap < 1 and not violations:
+                # 시총 체크 (데이터가 있을 때만)
+                if mcap > 0 and mcap < 1 and not violations:
                     if quote_type == 'ETF':
                         warnings.append(f"소규모 ETF (AUM ${mcap:.2f}B)")
                     else:
                         warnings.append(f"소형주 (시총 ${mcap:.2f}B)")
                 
+                # 변동성 체크
                 if vol >= 200 and not violations:
                     warnings.append(f"높은 변동성 {vol:.0f}%")
+                
+                # FDR 소스일 경우 추가 경고
+                if stock_data['source'] == 'fdr':
+                    warnings.append("일부 정보 제한 (백업 데이터 소스)")
                 
                 # 판정 결과
                 st.markdown("---")
                 
                 data_us = {
                     'market_cap': mcap,
-                    'exchange': exchange,
+                    'exchange': exchange if exchange != "Unknown" else "확인 필요",
                     'type': stock_type,
                     'price': price,
                     'volatility': vol
@@ -550,6 +602,10 @@ else:
                     opinion = generate_approval_opinion(data_us, False)
                     st.markdown(opinion)
                 
+                # 데이터 소스 표시
+                if data_source:
+                    st.caption(f"📊 데이터 출처: {data_source}")
+                
                 # 다운로드
                 st.markdown("---")
                 report = pd.DataFrame([{
@@ -559,8 +615,9 @@ else:
                     "유형": stock_type,
                     "거래소": exchange,
                     "판정": judgment,
-                    mcap_label: f"${mcap:.1f}B",
-                    "변동성": f"{vol:.1f}%"
+                    mcap_label: f"${mcap:.1f}B" if mcap > 0 else "-",
+                    "변동성": f"{vol:.1f}%",
+                    "데이터소스": data_source
                 }])
                 
                 csv = report.to_csv(index=False, encoding='utf-8-sig')
@@ -570,12 +627,11 @@ else:
                     f"심사_{ticker.upper()}_{datetime.now().strftime('%Y%m%d')}.csv",
                     use_container_width=True
                 )
-            
-        except Exception as e:
-            st.error(f"❌ 오류 발생")
-            st.info("💡 잠시 후 다시 시도해주세요.")
-            with st.expander("상세 오류 정보"):
-                st.code(str(e))
+                
+            except Exception as e:
+                st.error(f"❌ 데이터 처리 중 오류 발생")
+                with st.expander("상세 오류 정보"):
+                    st.code(str(e))
                 
 st.markdown("---")
 st.caption("ⓒ 2026 Pind | v5.0 고도화")
