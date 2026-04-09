@@ -424,131 +424,158 @@ if search_button:
                     st.error(f"❌ 오류: {str(e)}")
         
         # === 해외주식 ===
-        else:
-            st.markdown("## 🌎 해외주식 심사")
+else:
+    st.markdown("## 🌎 해외주식 심사")
+    
+    with st.spinner("데이터 수집 중..."):
+        try:
+            # yfinance 호출 시 재시도 로직
+            import time
+            max_retries = 3
+            retry_count = 0
+            success = False
             
-            with st.spinner("데이터 수집 중..."):
+            while retry_count < max_retries and not success:
                 try:
                     stock = yf.Ticker(ticker.upper())
                     info = stock.info
-                    hist = stock.history(period="1y")
                     
-                    name = info.get('longName', info.get('shortName', 'N/A'))
-                    exchange_raw = info.get('exchange', 'N/A')
-                    price = info.get('currentPrice', info.get('regularMarketPrice', 0))
-                    
-                    quote_type = info.get('quoteType', '')
-                    
+                    # 데이터가 제대로 왔는지 확인
+                    if info and len(info) > 5:
+                        success = True
+                    else:
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            time.sleep(2)  # 2초 대기
+                except:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        time.sleep(2)
+            
+            if not success:
+                st.error("❌ Yahoo Finance에서 데이터를 가져올 수 없습니다.")
+                st.info("💡 잠시 후 다시 시도해주세요. (API 요청 제한)")
+            else:
+                hist = stock.history(period="1y")
+                
+                name = info.get('longName', info.get('shortName', ticker.upper()))
+                exchange_raw = info.get('exchange', 'N/A')
+                price = info.get('currentPrice', info.get('regularMarketPrice', 0))
+                
+                quote_type = info.get('quoteType', '')
+                
+                if quote_type == 'ETF':
+                    mcap_value = info.get('totalAssets', 0)
+                    mcap_label = "AUM"
+                    stock_type = "ETF"
+                else:
+                    mcap_value = info.get('marketCap', 0)
+                    mcap_label = "시총"
+                    stock_type = "주식"
+                
+                mcap = mcap_value / 1e9 if mcap_value else 0
+                
+                exchange_map = {
+                    'NYQ': 'NYSE', 'NMS': 'NASDAQ', 'NGM': 'NASDAQ',
+                    'NAS': 'NASDAQ', 'PCX': 'NYSE Arca', 'NYSEARCA': 'NYSE Arca'
+                }
+                exchange = exchange_map.get(exchange_raw, exchange_raw)
+                
+                # 변동성
+                if not hist.empty:
+                    high = hist['High'].max()
+                    low = hist['Low'].min()
+                    vol = ((high - low) / low) * 100 if low > 0 else 0
+                else:
+                    high = 0
+                    low = 0
+                    vol = 0
+                
+                # 기본 정보
+                st.markdown("### 📌 기본 정보")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("종목명", name[:15])
+                col2.metric("거래소", exchange)
+                col3.metric("가격", f"${price:.2f}")
+                col4.metric(mcap_label, f"${mcap:.1f}B")
+                
+                st.markdown("---")
+                
+                violations = []
+                warnings = []
+                
+                allowed = ["NYSE", "NASDAQ", "NYSE Arca"]
+                if exchange not in allowed and exchange != "N/A":
+                    violations.append(f"비허용 거래소: {exchange}")
+                if "OTC" in exchange.upper():
+                    violations.append("OTC 장외시장")
+                
+                if quote_type != "ETF" and quote_type in ["MLP", "ETP"]:
+                    violations.append("PTP 구조")
+                
+                if mcap < 1 and not violations:
                     if quote_type == 'ETF':
-                        mcap_value = info.get('totalAssets', 0)
-                        mcap_label = "AUM"
-                        stock_type = "ETF"
+                        warnings.append(f"소규모 ETF (AUM ${mcap:.2f}B)")
                     else:
-                        mcap_value = info.get('marketCap', 0)
-                        mcap_label = "시총"
-                        stock_type = "주식"
-                    
-                    mcap = mcap_value / 1e9 if mcap_value else 0
-                    
-                    exchange_map = {
-                        'NYQ': 'NYSE', 'NMS': 'NASDAQ', 'NGM': 'NASDAQ',
-                        'NAS': 'NASDAQ', 'PCX': 'NYSE Arca', 'NYSEARCA': 'NYSE Arca'
-                    }
-                    exchange = exchange_map.get(exchange_raw, exchange_raw)
-                    
-                    # 변동성
-                    if not hist.empty:
-                        high = hist['High'].max()
-                        low = hist['Low'].min()
-                        vol = ((high - low) / low) * 100 if low > 0 else 0
-                    else:
-                        high = 0
-                        low = 0
-                        vol = 0
-                    
-                    # 기본 정보
-                    st.markdown("### 📌 기본 정보")
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    col1.metric("종목명", name[:15])
-                    col2.metric("거래소", exchange)
-                    col3.metric("가격", f"${price:.2f}")
-                    col4.metric(mcap_label, f"${mcap:.1f}B")
-                    
-                    st.markdown("---")
-                    
-                    violations = []
-                    warnings = []
-                    
-                    allowed = ["NYSE", "NASDAQ", "NYSE Arca"]
-                    if exchange not in allowed and exchange != "N/A":
-                        violations.append(f"비허용 거래소: {exchange}")
-                    if "OTC" in exchange.upper():
-                        violations.append("OTC 장외시장")
-                    
-                    if quote_type != "ETF" and quote_type in ["MLP", "ETP"]:
-                        violations.append("PTP 구조")
-                    
-                    if mcap < 1 and not violations:
-                        if quote_type == 'ETF':
-                            warnings.append(f"소규모 ETF (AUM ${mcap:.2f}B)")
-                        else:
-                            warnings.append(f"소형주 (시총 ${mcap:.2f}B)")
-                    
-                    if vol >= 200 and not violations:
-                        warnings.append(f"높은 변동성 {vol:.0f}%")
-                    
-                    # 판정 결과
-                    st.markdown("---")
-                    
-                    data_us = {
-                        'market_cap': mcap,
-                        'exchange': exchange,
-                        'type': stock_type,
-                        'price': price,
-                        'volatility': vol
-                    }
-                    
-                    if violations:
-                        st.error("⛔ **담보 인정 불가**")
-                        judgment = "불가"
-                        opinion = generate_rejection_opinion(violations, data_us, False)
-                        st.markdown(opinion)
-                    elif warnings:
-                        st.warning("⚠️ **조건부 담보 인정 (고위험)**")
-                        judgment = "조건부"
-                        opinion = generate_conditional_opinion(warnings, data_us, False)
-                        st.markdown(opinion)
-                    else:
-                        st.success("✅ **담보 인정 가능**")
-                        judgment = "가능"
-                        opinion = generate_approval_opinion(data_us, False)
-                        st.markdown(opinion)
-                    
-                    # 다운로드
-                    st.markdown("---")
-                    report = pd.DataFrame([{
-                        "심사일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "티커": ticker.upper(),
-                        "종목명": name,
-                        "유형": stock_type,
-                        "거래소": exchange,
-                        "판정": judgment,
-                        mcap_label: f"${mcap:.1f}B",
-                        "변동성": f"{vol:.1f}%"
-                    }])
-                    
-                    csv = report.to_csv(index=False, encoding='utf-8-sig')
-                    st.download_button(
-                        "📥 심사결과 다운로드",
-                        csv,
-                        f"심사_{ticker.upper()}_{datetime.now().strftime('%Y%m%d')}.csv",
-                        use_container_width=True
-                    )
-                    
-                except Exception as e:
-                    st.error(f"❌ 오류: {str(e)}")
-                    st.info("종목코드를 확인해주세요.")
-
+                        warnings.append(f"소형주 (시총 ${mcap:.2f}B)")
+                
+                if vol >= 200 and not violations:
+                    warnings.append(f"높은 변동성 {vol:.0f}%")
+                
+                # 판정 결과
+                st.markdown("---")
+                
+                data_us = {
+                    'market_cap': mcap,
+                    'exchange': exchange,
+                    'type': stock_type,
+                    'price': price,
+                    'volatility': vol
+                }
+                
+                if violations:
+                    st.error("⛔ **담보 인정 불가**")
+                    judgment = "불가"
+                    opinion = generate_rejection_opinion(violations, data_us, False)
+                    st.markdown(opinion)
+                elif warnings:
+                    st.warning("⚠️ **조건부 담보 인정 (고위험)**")
+                    judgment = "조건부"
+                    opinion = generate_conditional_opinion(warnings, data_us, False)
+                    st.markdown(opinion)
+                else:
+                    st.success("✅ **담보 인정 가능**")
+                    judgment = "가능"
+                    opinion = generate_approval_opinion(data_us, False)
+                    st.markdown(opinion)
+                
+                # 다운로드
+                st.markdown("---")
+                report = pd.DataFrame([{
+                    "심사일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "티커": ticker.upper(),
+                    "종목명": name,
+                    "유형": stock_type,
+                    "거래소": exchange,
+                    "판정": judgment,
+                    mcap_label: f"${mcap:.1f}B",
+                    "변동성": f"{vol:.1f}%"
+                }])
+                
+                csv = report.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    "📥 심사결과 다운로드",
+                    csv,
+                    f"심사_{ticker.upper()}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    use_container_width=True
+                )
+            
+        except Exception as e:
+            st.error(f"❌ 오류 발생")
+            st.info("💡 잠시 후 다시 시도해주세요.")
+            with st.expander("상세 오류 정보"):
+                st.code(str(e))
+                
 st.markdown("---")
 st.caption("ⓒ 2026 Pind | v5.0 고도화")
