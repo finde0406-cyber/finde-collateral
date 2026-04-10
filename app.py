@@ -7,7 +7,7 @@ import time
 
 st.set_page_config(page_title="핀드 담보 심사", page_icon="🏦", layout="wide")
 
-# === 데이터 수집 함수 (v7.0 그대로) ===
+# === 데이터 수집 함수 (동일) ===
 
 @st.cache_data(ttl=3600)
 def fetch_korean_stock(ticker):
@@ -103,10 +103,9 @@ def fetch_us_stock(ticker):
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
-# === 리스크 분석 함수 (v7.0 그대로) ===
+# === 리스크 분석 함수 (동일) ===
 
 def analyze_korean_stock(data):
-    """국내주식 보수적 리스크 분석"""
     market_cap = data['market_cap']
     current_price = data['current_price']
     dept = data.get('dept', '')
@@ -183,7 +182,6 @@ def analyze_korean_stock(data):
     }
 
 def analyze_us_stock(data):
-    """해외주식 보수적 리스크 분석"""
     exchange = data['exchange']
     mcap = data['mcap']
     price = data['price']
@@ -344,118 +342,95 @@ with st.sidebar:
         st.cache_data.clear()
         st.success("완료!")
 
-# === 메인 (입력창 50% 크기) ===
+# === 메인 ===
 
-input_col1, input_col2 = st.columns([1, 1])
+# 입력창 (절반 크기)
+col_input, col_empty = st.columns(2)
 
-with input_col1:
+with col_input:
     ticker = st.text_input("종목코드 / 티커", placeholder="예: 005930, AAPL")
     search_button = st.button("🔍 심사 시작", type="primary", use_container_width=True)
 
-# === 결과 표시 (if 안에서 좌우 분할) ===
-
-if search_button:
-    if not ticker:
-        st.error("❌ 종목코드를 입력하세요")
+# 결과 표시
+if search_button and ticker:
+    is_korean = ticker.isdigit() and len(ticker) == 6
+    
+    if is_korean:
+        with st.spinner("분석 중..."):
+            data = fetch_korean_stock(ticker)
+            
+            if data['success']:
+                analysis = analyze_korean_stock(data)
+                
+                # 명확한 좌우 분할
+                result_left, result_right = st.columns([1, 2])
+                
+                with result_left:
+                    if analysis['eligible']:
+                        st.success("### ✅ 담보 인정 가능")
+                    else:
+                        st.error("### ⛔ 담보 인정 불가")
+                    st.markdown(f"**위험 등급**: {analysis['risk_level']}")
+                
+                with result_right:
+                    st.markdown("### 📌 기본 정보")
+                    st.text(f"종목명: {data['name']}")
+                    st.text(f"시장: {data['market']}")
+                    st.text(f"현재가: {data['current_price']:,.0f}원")
+                    st.text(f"시총: {data['market_cap']:,.0f}억")
+                    st.caption(f"💎 {analysis['cap_grade']}")
+                    
+                    if analysis['violations']:
+                        st.markdown("### ❌ 담보 불가 사유")
+                        for v in analysis['violations']:
+                            st.markdown(v)
+                        st.markdown("### ⚠️ 주요 리스크")
+                        for r in analysis['risk_factors']:
+                            st.markdown(f"• {r}")
+                    
+                    st.markdown("### 📈 52주 주가")
+                    st.text(f"최고: {data['high_52w']:,.0f}원 | 최저: {data['low_52w']:,.0f}원 | 변동폭: {analysis['volatility']:.1f}%")
+            else:
+                st.error("❌ 조회 실패 - 30분 후 재시도")
+    
     else:
-        is_korean = ticker.isdigit() and len(ticker) == 6
-        
-        # 국내주식
-        if is_korean:
-            with st.spinner("분석 중..."):
-                data = fetch_korean_stock(ticker)
+        with st.spinner("분석 중..."):
+            data = fetch_us_stock(ticker)
+            
+            if data['success']:
+                analysis = analyze_us_stock(data)
                 
-                if not data['success']:
-                    st.error("❌ 조회 실패")
-                    st.warning("⏰ 30분~1시간 후 재시도")
-                else:
-                    analysis = analyze_korean_stock(data)
-                    
-                    # 좌우 컬럼 분할 (여기서!)
-                    left_col, right_col = st.columns([1, 2])
-                    
-                    # 좌측: 판정
-                    with left_col:
-                        if analysis['eligible']:
-                            st.success(f"### ✅ {analysis['judgment']}")
-                        else:
-                            st.error(f"### ⛔ {analysis['judgment']}")
-                        
-                        st.markdown(f"**위험 등급**: {analysis['risk_level']}")
-                    
-                    # 우측: 상세 정보
-                    with right_col:
-                        st.markdown("### 📌 기본 정보")
-                        st.text(f"종목명: {data['name']}")
-                        st.text(f"시장: {data['market']}")
-                        st.text(f"현재가: {data['current_price']:,.0f}원")
-                        st.text(f"시총: {data['market_cap']:,.0f}억")
-                        st.caption(f"💎 {analysis['cap_grade']}")
-                        
-                        if analysis['violations']:
-                            st.markdown("---")
-                            st.markdown("### ❌ 담보 불가 사유")
-                            for v in analysis['violations']:
-                                st.markdown(v)
-                            
-                            st.markdown("---")
-                            st.markdown("### ⚠️ 주요 리스크")
-                            for r in analysis['risk_factors']:
-                                st.markdown(f"• {r}")
-                        
-                        st.markdown("---")
-                        st.markdown("### 📈 52주 주가")
-                        st.text(f"최고: {data['high_52w']:,.0f}원")
-                        st.text(f"최저: {data['low_52w']:,.0f}원")
-                        st.text(f"변동폭: {analysis['volatility']:.1f}%")
-        
-        # 해외주식
-        else:
-            with st.spinner("분석 중..."):
-                data = fetch_us_stock(ticker)
+                result_left, result_right = st.columns([1, 2])
                 
-                if not data['success']:
-                    st.error("❌ 조회 실패")
-                    st.warning("⏰ 1시간 후 재시도")
-                else:
-                    analysis = analyze_us_stock(data)
+                with result_left:
+                    if analysis['eligible']:
+                        st.success("### ✅ 담보 인정 가능")
+                    else:
+                        st.error("### ⛔ 담보 인정 불가")
+                    st.markdown(f"**위험 등급**: {analysis['risk_level']}")
+                
+                with result_right:
+                    st.markdown("### 📌 기본 정보")
+                    st.text(f"종목명: {data['name']}")
+                    st.text(f"거래소: {data['exchange']}")
+                    st.text(f"가격: ${data['price']:.2f}")
+                    st.text(f"{data['mcap_label']}: ${data['mcap']:.2f}B")
                     
-                    # 좌우 컬럼 분할 (여기서!)
-                    left_col, right_col = st.columns([1, 2])
+                    if analysis['violations']:
+                        st.markdown("### ❌ 담보 불가 사유")
+                        for v in analysis['violations']:
+                            st.markdown(v)
+                        st.markdown("### ⚠️ 주요 리스크")
+                        for r in analysis['risk_factors']:
+                            st.markdown(f"• {r}")
                     
-                    # 좌측: 판정
-                    with left_col:
-                        if analysis['eligible']:
-                            st.success(f"### ✅ {analysis['judgment']}")
-                        else:
-                            st.error(f"### ⛔ {analysis['judgment']}")
-                        
-                        st.markdown(f"**위험 등급**: {analysis['risk_level']}")
-                    
-                    # 우측: 상세 정보
-                    with right_col:
-                        st.markdown("### 📌 기본 정보")
-                        st.text(f"종목명: {data['name']}")
-                        st.text(f"거래소: {data['exchange']}")
-                        st.text(f"가격: ${data['price']:.2f}")
-                        st.text(f"{data['mcap_label']}: ${data['mcap']:.2f}B")
-                        
-                        if analysis['violations']:
-                            st.markdown("---")
-                            st.markdown("### ❌ 담보 불가 사유")
-                            for v in analysis['violations']:
-                                st.markdown(v)
-                            
-                            st.markdown("---")
-                            st.markdown("### ⚠️ 주요 리스크")
-                            for r in analysis['risk_factors']:
-                                st.markdown(f"• {r}")
-                        
-                        st.markdown("---")
-                        st.markdown("### 📈 52주 주가")
-                        st.text(f"최고: ${data['high_52w']:.2f}")
-                        st.text(f"최저: ${data['low_52w']:.2f}")
-                        st.text(f"변동폭: {analysis['volatility']:.1f}%")
+                    st.markdown("### 📈 52주 주가")
+                    st.text(f"최고: ${data['high_52w']:.2f} | 최저: ${data['low_52w']:.2f} | 변동폭: {analysis['volatility']:.1f}%")
+            else:
+                st.error("❌ 조회 실패 - 1시간 후 재시도")
+
+elif search_button and not ticker:
+    st.error("❌ 종목코드를 입력하세요")
 
 st.markdown("---")
 st.caption("ⓒ 2026 FINDE | 리스크 관리 시스템 v7.0")
