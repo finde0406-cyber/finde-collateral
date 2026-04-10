@@ -112,7 +112,7 @@ def fetch_us_stock(ticker):
 def analyze_korean_stock(data):
     """
     국내주식 보수적 리스크 분석
-    원칙: 의심스러우면 불가, 회사 안전 최우선
+    원칙: 의심스러우면 불가, 리스크 관리 최우선
     """
     market_cap = data['market_cap']
     current_price = data['current_price']
@@ -204,7 +204,7 @@ def analyze_korean_stock(data):
 def analyze_us_stock(data):
     """
     해외주식 보수적 리스크 분석
-    원칙: 고위험은 무조건 불가, 회사 안전 최우선
+    원칙: 고위험은 무조건 불가, 리스크관리 최우선
     """
     exchange = data['exchange']
     mcap = data['mcap']
@@ -386,7 +386,7 @@ def render_korean_analysis(data, analysis):
 
 **최종 판정**: **담보 인정 불가**
 
-**근거**: 상장폐지 위험, 유동성 부족, 회사 안전 최우선
+**근거**: 상장폐지 위험, 유동성 부족, 리스크관리 최우선
         """)
     
     else:
@@ -561,7 +561,7 @@ def render_us_analysis(data, analysis):
 
 **최종 판정**: **담보 인정 불가**
 
-**근거**: 회사 안전 최우선, 손실 위험 차단
+**근거**: 리스크관리 최우선, 손실 위험 차단
             """)
     
     else:
@@ -615,7 +615,7 @@ with st.sidebar:
     
     st.error("### ⚠️ 보수적 리스크 관리")
     st.markdown("""
-    **원칙**: 회사 안전 최우선
+    **원칙**: 리스크관리 최우선
     
     **의심스러우면 → 불가**  
     **애매하면 → 불가**  
