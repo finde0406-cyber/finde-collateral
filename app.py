@@ -676,7 +676,7 @@ if st.button("🔍 심사 시작", type="primary", use_container_width=True):
         # 국내주식
         if is_korean:
             st.markdown("## 🇰🇷 국내주식 담보 심사")
-            st.markdown("**원칙**: 회사 안전 최우선 / 의심스러우면 불가")
+            st.markdown("**원칙**: 리스크관리 최우선 / 의심스러우면 불가")
             st.markdown("---")
             
             with st.spinner("종목 분석 중..."):
