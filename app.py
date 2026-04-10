@@ -730,4 +730,3 @@ if st.button("🔍 심사 시작", type="primary", use_container_width=True):
 
 st.markdown("---")
 st.caption("ⓒ 2026 Pind | 보수적 리스크 관리 시스템 v7.0")
-st.caption("회사 안전 최우선 / 의심스러우면 불가 / 100% 안전한 종목만 담보 인정")
