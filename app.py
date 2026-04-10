@@ -729,4 +729,4 @@ if st.button("🔍 심사 시작", type="primary", use_container_width=True):
                     render_us_analysis(data, analysis)
 
 st.markdown("---")
-st.caption("ⓒ 2026 Pind | 보수적 리스크 관리 시스템 v7.0")
+st.caption("ⓒ 2026 FINDE | 보수적 리스크 관리 시스템 v7.0")
