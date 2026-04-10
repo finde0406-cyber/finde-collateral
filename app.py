@@ -344,27 +344,24 @@ with st.sidebar:
         st.cache_data.clear()
         st.success("완료!")
 
-# === 메인 (2단 레이아웃) ===
+# === 메인 (입력창 50% 크기) ===
 
-# 입력창 (폭 50%로 축소)
 input_col1, input_col2 = st.columns([1, 1])
 
 with input_col1:
     ticker = st.text_input("종목코드 / 티커", placeholder="예: 005930, AAPL")
     search_button = st.button("🔍 심사 시작", type="primary", use_container_width=True)
 
-# 결과 표시 (좌우 분할)
+# === 결과 표시 (if 안에서 좌우 분할) ===
+
 if search_button:
     if not ticker:
         st.error("❌ 종목코드를 입력하세요")
     else:
         is_korean = ticker.isdigit() and len(ticker) == 6
         
-        # 좌우 컬럼
-        left_col, right_col = st.columns([1, 2])
-        
+        # 국내주식
         if is_korean:
-            # 국내주식
             with st.spinner("분석 중..."):
                 data = fetch_korean_stock(ticker)
                 
@@ -374,7 +371,10 @@ if search_button:
                 else:
                     analysis = analyze_korean_stock(data)
                     
-                    # 좌측: 판정 결과
+                    # 좌우 컬럼 분할 (여기서!)
+                    left_col, right_col = st.columns([1, 2])
+                    
+                    # 좌측: 판정
                     with left_col:
                         if analysis['eligible']:
                             st.success(f"### ✅ {analysis['judgment']}")
@@ -409,8 +409,8 @@ if search_button:
                         st.text(f"최저: {data['low_52w']:,.0f}원")
                         st.text(f"변동폭: {analysis['volatility']:.1f}%")
         
+        # 해외주식
         else:
-            # 해외주식
             with st.spinner("분석 중..."):
                 data = fetch_us_stock(ticker)
                 
@@ -420,7 +420,10 @@ if search_button:
                 else:
                     analysis = analyze_us_stock(data)
                     
-                    # 좌측: 판정 결과
+                    # 좌우 컬럼 분할 (여기서!)
+                    left_col, right_col = st.columns([1, 2])
+                    
+                    # 좌측: 판정
                     with left_col:
                         if analysis['eligible']:
                             st.success(f"### ✅ {analysis['judgment']}")
