@@ -165,7 +165,7 @@ if search_button and ticker:
                 # 담보인정비율 (중요!)
                 if analysis['acceptance_ratio'] < 100:
                     st.warning(f"**💰 권장 담보인정비율: {analysis['acceptance_ratio']}%**")
-                    st.caption(f"사유: {analysis['ratio_reason']}"))
+                    st.caption(f"사유: {analysis['ratio_reason']}")
                 
                 st.markdown("---")
                 
