@@ -1,5 +1,5 @@
 streamlit
 yfinance
-FinanceDataReader
+git+https://github.com/FinanceData/FinanceDataReader.git
 pandas
 openpyxl
