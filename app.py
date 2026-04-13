@@ -140,23 +140,23 @@ if search_button and ticker:
                 
                 # 기본 정보 카드
                 info_col1, info_col2, info_col3 = st.columns(3)
-                
+
                 with info_col1:
-                    st.metric("종목명", data['name'])
-                    st.caption(f"**{ticker}** · {data['market']}")
+                    st.markdown(f"**종목명**  \n### {data['name']}")
+                    st.caption(f"{ticker} · {data['market']}")
                     if data.get('sector') != 'N/A':
                         st.caption(f"업종: {data['sector']}")
                 
                 with info_col2:
-                    st.metric("시가총액", f"{data['market_cap']:,.0f}억")
-                    st.caption(f"등급: **{analysis['cap_grade']}**")
-                    st.metric("현재가", f"{data['current_price']:,.0f}원")
+                    st.markdown(f"**시가총액**  \n### {data['market_cap']:,.0f}억")
+                    st.caption(f"등급: {analysis['cap_grade']}")
+                    st.markdown(f"**현재가**  \n### {data['current_price']:,.0f}원")
                 
                 with info_col3:
-                    st.metric("변동성", f"{analysis['volatility']:.1f}%")
+                    st.markdown(f"**변동성**  \n### {analysis['volatility']:.1f}%")
                     st.caption(f"52주 고가: {data['high_52w']:,.0f}원")
                     st.caption(f"52주 저가: {data['low_52w']:,.0f}원")
-                    st.caption(f"현재 위치: **{analysis['price_position']:.1f}%**")
+                    st.caption(f"현재 위치: {analysis['price_position']:.1f}%")
                 
                 # 담보인정비율 (중요!)
                 if analysis['acceptance_ratio'] < 100:
@@ -266,23 +266,23 @@ if search_button and ticker:
                 info_col1, info_col2, info_col3 = st.columns(3)
                 
                 with info_col1:
-                    st.metric("종목명", data['name'])
-                    st.caption(f"**{ticker.upper()}** · {data['exchange']}")
+                    st.markdown(f"**종목명**  \n### {data['name']}")
+                    st.caption(f"{ticker.upper()} · {data['exchange']}")
                     if data.get('sector') != 'N/A':
                         st.caption(f"{data['sector']}")
                     if data.get('industry') != 'N/A':
                         st.caption(f"{data['industry']}")
                 
                 with info_col2:
-                    st.metric(data['mcap_label'], f"${data['mcap']:.2f}B")
-                    st.caption(f"등급: **{analysis.get('cap_category', 'N/A')}**")
-                    st.metric("현재가", f"${data['price']:.2f}")
+                    st.markdown(f"**{data['mcap_label']}**  \n### ${data['mcap']:.2f}B")
+                    st.caption(f"등급: {analysis.get('cap_category', 'N/A')}")
+                    st.markdown(f"**현재가**  \n### ${data['price']:.2f}")
                 
                 with info_col3:
-                    st.metric("변동성", f"{analysis['volatility']:.1f}%")
+                    st.markdown(f"**변동성**  \n### {analysis['volatility']:.1f}%")
                     st.caption(f"52주 고가: ${data['high_52w']:.2f}")
                     st.caption(f"52주 저가: ${data['low_52w']:.2f}")
-                    st.caption(f"현재 위치: **{analysis['price_position']:.1f}%**")
+                    st.caption(f"현재 위치: {analysis['price_position']:.1f}%")
                 
                 # 담보인정비율
                 if analysis['acceptance_ratio'] < 100:
