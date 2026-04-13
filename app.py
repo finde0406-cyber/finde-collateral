@@ -7,7 +7,7 @@ import time
 
 st.set_page_config(page_title="핀드 담보 심사", page_icon="🏦", layout="wide")
 
-# === 데이터 수집 함수 (v7.0 그대로) ===
+# === 데이터 수집 함수 (동일) ===
 
 @st.cache_data(ttl=3600)
 def fetch_korean_stock(ticker):
@@ -103,7 +103,7 @@ def fetch_us_stock(ticker):
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
-# === 리스크 분석 함수 (v7.0 그대로) ===
+# === 국내주식 리스크 분석 (동일) ===
 
 def analyze_korean_stock(data):
     market_cap = data['market_cap']
@@ -181,6 +181,8 @@ def analyze_korean_stock(data):
         'current_price': current_price
     }
 
+# === 해외주식 리스크 분석 (베타 3.0) ===
+
 def analyze_us_stock(data):
     exchange = data['exchange']
     mcap = data['mcap']
@@ -256,9 +258,9 @@ def analyze_us_stock(data):
         risk_factors.append("단기간 급락 위험")
     
     beta = data.get('beta', 0)
-    if beta > 2.0:
-        violations.append(f"❌ 고베타 {beta:.2f} (시장 대비 2배 이상 변동)")
-        risk_factors.append("시장 하락 시 2배 이상 급락 가능")
+    if beta > 3.0:
+        violations.append(f"❌ 고베타 {beta:.2f} (시장 대비 3배 이상 변동)")
+        risk_factors.append("시장 하락 시 3배 이상 급락 가능")
     
     if violations:
         judgment = "담보 인정 불가"
@@ -285,7 +287,7 @@ def analyze_us_stock(data):
 
 with st.sidebar:
     st.title("🏦 핀드 담보 심사")
-    st.caption("KB증권 하이브리드 | v7.0")
+    st.caption("KB증권 하이브리드 | v7.1")
     st.markdown("---")
     
     st.header("📖 가이드")
@@ -300,7 +302,7 @@ with st.sidebar:
     **애매하면 → 불가**  
     **위험 가능성 → 불가**
     
-    ✅ **100% 안전만** 담보 인정
+    ✅ **안전한 종목만** 담보 인정
     """)
     
     st.markdown("---")
@@ -325,6 +327,7 @@ with st.sidebar:
         - PTP 구조 (MLP/ETP)
         - 거래량 부족
         - 변동성 극심
+        - 고베타 (3.0 이상)
         """)
     
     with st.expander("⚙️ 2026년 강화 기준"):
@@ -342,19 +345,20 @@ with st.sidebar:
         st.cache_data.clear()
         st.success("완료!")
 
-# === 메인 (컴팩트 UI) ===
+# === 메인 (엔터키 실행 추가) ===
 
 st.title("🏦 핀드 담보 심사")
-st.caption("KB증권 하이브리드 계좌운용규칙 | v7.0 보수적 리스크 관리")
+st.caption("KB증권 하이브리드 계좌운용규칙 | v7.1 보수적 리스크 관리")
 
-# 입력창 (한 줄)
-c1, c2, c3, c4 = st.columns([3, 1, 6, 1])
-with c1:
-    ticker = st.text_input("종목코드/티커", placeholder="005930, AAPL", label_visibility="collapsed")
-with c2:
-    search_button = st.button("🔍 심사", use_container_width=True)
+# 폼으로 감싸서 엔터키 실행 가능하게
+with st.form(key='search_form', clear_on_submit=False):
+    c1, c2, c3, c4 = st.columns([3, 1, 6, 1])
+    with c1:
+        ticker = st.text_input("종목코드/티커", placeholder="005930, AAPL", label_visibility="collapsed")
+    with c2:
+        search_button = st.form_submit_button("🔍 심사", use_container_width=True)
 
-# 결과
+# 심사 실행
 if search_button and ticker:
     is_korean = ticker.isdigit() and len(ticker) == 6
     
@@ -367,16 +371,13 @@ if search_button and ticker:
                 
                 st.markdown("---")
                 
-                # 판정
                 if analysis['eligible']:
                     st.success(f"## ✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 else:
                     st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 
-                # 기본 정보 (한 줄)
                 st.markdown(f"**{data['name']}** | {data['market']} | {data['current_price']:,.0f}원 | 시총 {data['market_cap']:,.0f}억 | {analysis['cap_grade']} | 변동성 {analysis['volatility']:.1f}%")
                 
-                # 불가 사유
                 if analysis['violations']:
                     st.markdown("### ❌ 담보 불가 사유")
                     for v in analysis['violations']:
@@ -398,16 +399,13 @@ if search_button and ticker:
                 
                 st.markdown("---")
                 
-                # 판정
                 if analysis['eligible']:
                     st.success(f"## ✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 else:
                     st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 
-                # 기본 정보 (한 줄)
                 st.markdown(f"**{data['name']}** | {data['exchange']} | ${data['price']:.2f} | {data['mcap_label']} ${data['mcap']:.2f}B | 변동성 {analysis['volatility']:.1f}%")
                 
-                # 불가 사유
                 if analysis['violations']:
                     st.markdown("### ❌ 담보 불가 사유")
                     for v in analysis['violations']:
@@ -423,4 +421,4 @@ elif search_button:
     st.error("❌ 종목코드를 입력하세요")
 
 st.markdown("---")
-st.caption("ⓒ 2026 FINDE | 리스크 관리 시스템 v7.0")
+st.caption("ⓒ 2026 FINDE | 리스크 관리 시스템 v7.1")
