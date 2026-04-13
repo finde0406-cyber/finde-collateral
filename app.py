@@ -91,12 +91,13 @@ with st.sidebar:
 st.title("🏦 핀드 담보 심사 시스템")
 st.caption(f"KB증권 하이브리드 계좌운용규칙 | v{VERSION}")
 
-# 입력창 - 컴팩트하게
-col1, col2, col3 = st.columns([2, 1, 3])
-with col1:
-    ticker = st.text_input("종목코드/티커", placeholder="005930, AAPL", label_visibility="collapsed")
-with col2:
-    search_button = st.button("🔍 심사", use_container_width=True, type="primary")
+# 입력창 - 엔터 키 지원
+with st.form(key='search_form', clear_on_submit=False):
+    col1, col2, col3 = st.columns([2, 1, 3])
+    with col1:
+        ticker = st.text_input("종목코드/티커", placeholder="005930, AAPL", label_visibility="collapsed")
+    with col2:
+        search_button = st.form_submit_button("🔍 심사", use_container_width=True, type="primary")
 
 if search_button and ticker:
     is_korean = ticker.isdigit() and len(ticker) == 6
