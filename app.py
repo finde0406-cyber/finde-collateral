@@ -313,3 +313,4 @@ elif search_button:
 
 st.markdown("---")
 st.caption(f"ⓒ 2026 FINDE | 리스크 관리 시스템 v{VERSION}")
+   # v8.0 업데이트
