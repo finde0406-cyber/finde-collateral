@@ -181,7 +181,7 @@ def analyze_korean_stock(data):
         'current_price': current_price
     }
 
-# === 해외주식 리스크 분석 (베타 3.0) ===
+# === 해외주식 리스크 분석 (단계별 세분화) ===
 
 def analyze_us_stock(data):
     exchange = data['exchange']
@@ -246,16 +246,23 @@ def analyze_us_stock(data):
         violations.append(f"❌ 거래량 부족 (평균 {volume:,}주/일)")
         risk_factors.append("로스컷 시 매도 어려움, 슬리피지 발생")
     
-    if mcap >= 10:
+    # 단계별 변동성 기준 (시총별 세분화)
+    if mcap >= 50:  # $50B 이상 초대형주
         volatility_limit = 300
-    elif mcap >= 1:
+        cap_category = "초대형주"
+    elif mcap >= 10:  # $10B~$50B 대형주
         volatility_limit = 200
-    else:
+        cap_category = "대형주"
+    elif mcap >= 1:  # $1B~$10B 중형주
         volatility_limit = 150
+        cap_category = "중형주"
+    else:  # $1B 미만 소형주
+        volatility_limit = 100
+        cap_category = "소형주"
     
     if volatility >= volatility_limit:
-        violations.append(f"❌ 극심한 변동성 {volatility:.0f}% (기준 {volatility_limit}% 초과)")
-        risk_factors.append("단기간 급락 위험")
+        violations.append(f"❌ 극심한 변동성 {volatility:.0f}% ({cap_category} 기준 {volatility_limit}% 초과)")
+        risk_factors.append("단기간 급락으로 로스컷 가능성 높음")
     
     beta = data.get('beta', 0)
     if beta > 3.0:
@@ -302,7 +309,7 @@ with st.sidebar:
     **애매하면 → 불가**  
     **위험 가능성 → 불가**
     
-    ✅ **안전한 종목만** 담보 인정
+    ✅ **100% 안전만** 담보 인정
     """)
     
     st.markdown("---")
@@ -326,7 +333,7 @@ with st.sidebar:
         - 나스닥/NYSE 기준 미달
         - PTP 구조 (MLP/ETP)
         - 거래량 부족
-        - 변동성 극심
+        - 변동성 극심 (시총별 차등)
         - 고베타 (3.0 이상)
         """)
     
@@ -341,16 +348,24 @@ with st.sidebar:
         - 시총 500억 이상만 인정
         """)
     
+    with st.expander("📊 해외주식 변동성 기준"):
+        st.markdown("""
+        **시총별 차등 적용**:
+        - 초대형주 ($50B 이상): 300% 초과 불가
+        - 대형주 ($10B~$50B): 200% 초과 불가
+        - 중형주 ($1B~$10B): 150% 초과 불가
+        - 소형주 ($1B 미만): 100% 초과 불가
+        """)
+    
     if st.button("🔄 캐시 초기화"):
         st.cache_data.clear()
         st.success("완료!")
 
-# === 메인 (엔터키 실행 추가) ===
+# === 메인 ===
 
 st.title("🏦 핀드 담보 심사")
 st.caption("KB증권 하이브리드 계좌운용규칙 | v7.1 보수적 리스크 관리")
 
-# 폼으로 감싸서 엔터키 실행 가능하게
 with st.form(key='search_form', clear_on_submit=False):
     c1, c2, c3, c4 = st.columns([3, 1, 6, 1])
     with c1:
@@ -358,7 +373,6 @@ with st.form(key='search_form', clear_on_submit=False):
     with c2:
         search_button = st.form_submit_button("🔍 심사", use_container_width=True)
 
-# 심사 실행
 if search_button and ticker:
     is_korean = ticker.isdigit() and len(ticker) == 6
     
