@@ -7,7 +7,7 @@ import time
 
 st.set_page_config(page_title="핀드 담보 심사", page_icon="🏦", layout="wide")
 
-# === 데이터 수집 함수 (동일) ===
+# === 데이터 수집 함수 ===
 
 @st.cache_data(ttl=3600)
 def fetch_korean_stock(ticker):
@@ -24,6 +24,7 @@ def fetch_korean_stock(ticker):
                 'success': True,
                 'name': stock_info.iloc[0]['Name'],
                 'market': stock_info.iloc[0]['Market'],
+                'sector': stock_info.iloc[0].get('Sector', 'N/A'),
                 'market_cap': stock_info.iloc[0].get('Marcap', 0) / 100000000,
                 'dept': stock_info.iloc[0].get('Dept', ''),
                 'current_price': df_price['Close'].iloc[-1],
@@ -48,6 +49,7 @@ def fetch_korean_stock(ticker):
                         'success': True,
                         'name': info.get('shortName', ticker),
                         'market': market_name,
+                        'sector': info.get('sector', 'N/A'),
                         'market_cap': mcap_raw / 100000000 if mcap_raw else 0,
                         'dept': '',
                         'current_price': hist['Close'].iloc[-1],
@@ -97,34 +99,43 @@ def fetch_us_stock(ticker):
             'high_52w': hist['High'].max() if not hist.empty else 0,
             'low_52w': hist['Low'].min() if not hist.empty else 0,
             'sector': info.get('sector', 'N/A'),
+            'industry': info.get('industry', 'N/A'),
             'beta': info.get('beta', 0),
             'volume': info.get('averageVolume', 0)
         }
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
-# === 국내주식 리스크 분석 (동일) ===
+# === 국내주식 리스크 분석 (개선) ===
 
 def analyze_korean_stock(data):
+    """국내주식 보수적 리스크 분석"""
     market_cap = data['market_cap']
     current_price = data['current_price']
     dept = data.get('dept', '')
     
+    # 변동성 및 현재가 위치 계산
     volatility = 0
+    price_position = 0
+    
     if data['low_52w'] > 0:
         volatility = ((data['high_52w'] - data['low_52w']) / data['low_52w']) * 100
+        price_position = ((current_price - data['low_52w']) / (data['high_52w'] - data['low_52w'])) * 100
     
     violations = []
     risk_factors = []
     
+    # 1. 관리종목
     if dept == '관리':
         violations.append("❌ 관리종목 지정 (상장폐지 심사 대상)")
         risk_factors.append("상장폐지 가능성 극히 높음")
     
+    # 2. 동전주
     if current_price < 1000:
         violations.append(f"❌ 동전주 {current_price:,.0f}원 (2026년 기준: 1,000원 미만 30일 연속 시 상폐)")
         risk_factors.append("30일 연속 시 관리종목 → 90일 내 미회복 시 상장폐지")
     
+    # 3. 시총
     if market_cap < 500:
         if market_cap < 100:
             violations.append(f"❌ 극소형주 시총 {market_cap:,.0f}억 (유동성 극히 낮음)")
@@ -136,30 +147,49 @@ def analyze_korean_stock(data):
             violations.append(f"❌ 시총 {market_cap:,.0f}억 (향후 300억 기준 강화 예정, 안전 마진 부족)")
             risk_factors.append("향후 기준 강화 시 퇴출 가능")
     
+    # 4. 백업 데이터
     if data.get('backup_warning'):
         violations.append("❌ 관리종목 여부 확인 불가 (백업 데이터 사용)")
         risk_factors.append("KRX 데이터 없어 관리종목 지정 여부 미확인")
     
-    if market_cap >= 10000:
+    # 5. 시총 등급 및 변동성 기준 (국내 기준 정확하게)
+    if market_cap >= 100000:  # 10조 이상
+        cap_grade = "초대형주"
+        volatility_limit = 500
+    elif market_cap >= 20000:  # 2조 ~ 10조
         cap_grade = "대형주"
         volatility_limit = 500
-    elif market_cap >= 1000:
+    elif market_cap >= 3000:  # 3,000억 ~ 2조
         cap_grade = "중형주"
         volatility_limit = 300
-    elif market_cap >= 500:
+    elif market_cap >= 1000:  # 1,000억 ~ 3,000억
+        cap_grade = "중견주"
+        volatility_limit = 250
+    elif market_cap >= 500:  # 500억 ~ 1,000억
         cap_grade = "소형주"
         volatility_limit = 200
     else:
         cap_grade = "극소형주"
         volatility_limit = 150
     
+    # 변동성 체크
     if volatility >= volatility_limit and market_cap >= 500:
-        violations.append(f"❌ 극심한 변동성 {volatility:.0f}% ({cap_grade} 기준 {volatility_limit}% 초과)")
-        risk_factors.append("단기간 급락으로 로스컷 가능성 높음")
+        violations.append(f"❌ 극심한 변동성 {volatility:.1f}% ({cap_grade} 기준 {volatility_limit}% 초과)")
+        risk_factors.append(f"52주 최고가 {data['high_52w']:,.0f}원 / 최저가 {data['low_52w']:,.0f}원")
+        risk_factors.append(f"현재가 위치: 52주 범위 중 {price_position:.1f}% 지점")
+        
+        if price_position > 80:
+            risk_factors.append("고점권 위치 - 하락 위험 높음")
+        elif price_position > 60:
+            risk_factors.append("중상단 위치 - 조정 가능성 있음")
+        elif price_position > 40:
+            risk_factors.append("중간 위치 - 양방향 변동 가능")
+        elif price_position > 20:
+            risk_factors.append("중하단 위치 - 상승 여력 있으나 변동성 주의")
+        else:
+            risk_factors.append("저점권 위치 - 상승 여력 있으나 추가 하락 가능성도 존재")
     
-    if market_cap >= 100000:
-        cap_grade = "초대형주"
-    
+    # 최종 판정
     if violations:
         judgment = "담보 인정 불가"
         risk_level = "🔴 높음"
@@ -176,29 +206,36 @@ def analyze_korean_stock(data):
         'violations': violations,
         'risk_factors': risk_factors,
         'volatility': volatility,
+        'price_position': price_position,
         'cap_grade': cap_grade,
         'market_cap': market_cap,
         'current_price': current_price
     }
 
-# === 해외주식 리스크 분석 (단계별 세분화) ===
+# === 해외주식 리스크 분석 (개선) ===
 
 def analyze_us_stock(data):
+    """해외주식 보수적 리스크 분석"""
     exchange = data['exchange']
     mcap = data['mcap']
     price = data['price']
     quote_type = data['quote_type']
     volume = data.get('volume', 0)
     
+    # 변동성 및 현재가 위치 계산
     volatility = 0
+    price_position = 0
+    
     if data['low_52w'] > 0:
         volatility = ((data['high_52w'] - data['low_52w']) / data['low_52w']) * 100
+        price_position = ((price - data['low_52w']) / (data['high_52w'] - data['low_52w'])) * 100
     
     violations = []
     risk_factors = []
     
     allowed_exchanges = ["NYSE", "NASDAQ", "NYSE Arca"]
     
+    # 1. 거래소
     if "OTC" in exchange.upper():
         violations.append("❌ OTC 장외시장 (상장폐지 후 이동, 규제 없음)")
         risk_factors.append("유동성 극히 낮고 가격 조작 위험, 사기 종목 다수")
@@ -209,6 +246,7 @@ def analyze_us_stock(data):
         violations.append(f"❌ 비허용 거래소: {exchange}")
         risk_factors.append("당사 허용 거래소 아님 (NYSE, NASDAQ, NYSE Arca만 허용)")
     
+    # 2. 나스닥 기준
     if exchange == "NASDAQ":
         if price < 1.0:
             violations.append(f"❌ 나스닥 Bid Price Rule 미달 (현재 ${price:.2f}, 기준 $1.00)")
@@ -217,6 +255,7 @@ def analyze_us_stock(data):
             violations.append(f"❌ 나스닥 시총 기준 미달 (현재 ${mcap:.3f}B, 안전 기준 $0.05B)")
             risk_factors.append("상장폐지 위험 (실제 기준 $35M이나 안전 마진 고려)")
     
+    # 3. NYSE 기준
     if exchange == "NYSE":
         if price < 1.0:
             violations.append(f"❌ NYSE 저가주 위험 (현재 ${price:.2f})")
@@ -225,10 +264,12 @@ def analyze_us_stock(data):
             violations.append(f"❌ NYSE 시총 기준 미달 (현재 ${mcap:.3f}B)")
             risk_factors.append("상장폐지 위험")
     
+    # 4. Penny Stock
     if price < 5.0:
         violations.append(f"❌ Penny Stock (가격 ${price:.2f}, 기준 $5.00 미만)")
         risk_factors.append("변동성 극심, 가격 조작 위험, 유동성 낮음")
     
+    # 5. 소형주/ETF
     if quote_type == "ETF":
         if mcap < 0.1:
             violations.append(f"❌ 소규모 ETF (AUM ${mcap:.3f}B, 안전 기준 $0.1B)")
@@ -238,37 +279,57 @@ def analyze_us_stock(data):
             violations.append(f"❌ 소형주 (시총 ${mcap:.2f}B, 안전 기준 $1.0B)")
             risk_factors.append("유동성 부족, 변동성 높음")
     
+    # 6. PTP
     if quote_type in ["MLP", "ETP"]:
         violations.append("❌ PTP 구조 (MLP/ETP)")
         risk_factors.append("K-1 세무서류 발급, 한국 세법 충돌, 담보 처리 시 복잡")
     
+    # 7. 거래량
     if volume > 0 and volume < 100000:
         violations.append(f"❌ 거래량 부족 (평균 {volume:,}주/일)")
         risk_factors.append("로스컷 시 매도 어려움, 슬리피지 발생")
     
-    # 단계별 변동성 기준 (시총별 세분화)
-    if mcap >= 50:  # $50B 이상 초대형주
-        volatility_limit = 300
+    # 8. 시총 등급 및 변동성 (해외 기준)
+    if mcap >= 50:  # $50B 이상
         cap_category = "초대형주"
-    elif mcap >= 10:  # $10B~$50B 대형주
-        volatility_limit = 200
+        volatility_limit = 300
+    elif mcap >= 10:  # $10B ~ $50B
         cap_category = "대형주"
-    elif mcap >= 1:  # $1B~$10B 중형주
-        volatility_limit = 150
+        volatility_limit = 250
+    elif mcap >= 2:  # $2B ~ $10B
         cap_category = "중형주"
-    else:  # $1B 미만 소형주
-        volatility_limit = 100
+        volatility_limit = 200
+    elif mcap >= 1:  # $1B ~ $2B
+        cap_category = "중견주"
+        volatility_limit = 150
+    else:  # $1B 미만
         cap_category = "소형주"
+        volatility_limit = 100
     
+    # 변동성 체크
     if volatility >= volatility_limit:
-        violations.append(f"❌ 극심한 변동성 {volatility:.0f}% ({cap_category} 기준 {volatility_limit}% 초과)")
-        risk_factors.append("단기간 급락으로 로스컷 가능성 높음")
+        violations.append(f"❌ 극심한 변동성 {volatility:.1f}% ({cap_category} 기준 {volatility_limit}% 초과)")
+        risk_factors.append(f"52주 최고가 ${data['high_52w']:.2f} / 최저가 ${data['low_52w']:.2f}")
+        risk_factors.append(f"현재가 위치: 52주 범위 중 {price_position:.1f}% 지점")
+        
+        if price_position > 80:
+            risk_factors.append("고점권 위치 - 하락 위험 높음")
+        elif price_position > 60:
+            risk_factors.append("중상단 위치 - 조정 가능성 있음")
+        elif price_position > 40:
+            risk_factors.append("중간 위치 - 양방향 변동 가능")
+        elif price_position > 20:
+            risk_factors.append("중하단 위치 - 상승 여력 있으나 변동성 주의")
+        else:
+            risk_factors.append("저점권 위치 - 상승 여력 있으나 추가 하락 가능성도 존재")
     
+    # 9. 베타
     beta = data.get('beta', 0)
     if beta > 3.0:
         violations.append(f"❌ 고베타 {beta:.2f} (시장 대비 3배 이상 변동)")
         risk_factors.append("시장 하락 시 3배 이상 급락 가능")
     
+    # 최종 판정
     if violations:
         judgment = "담보 인정 불가"
         risk_level = "🔴 높음"
@@ -285,16 +346,18 @@ def analyze_us_stock(data):
         'violations': violations,
         'risk_factors': risk_factors,
         'volatility': volatility,
+        'price_position': price_position,
         'mcap': mcap,
         'price': price,
-        'quote_type': quote_type
+        'quote_type': quote_type,
+        'cap_category': cap_category
     }
 
 # === 사이드바 ===
 
 with st.sidebar:
     st.title("🏦 핀드 담보 심사")
-    st.caption("KB증권 하이브리드 | v7.1")
+    st.caption("KB증권 하이브리드 | v7.2")
     st.markdown("---")
     
     st.header("📖 가이드")
@@ -309,7 +372,7 @@ with st.sidebar:
     **애매하면 → 불가**  
     **위험 가능성 → 불가**
     
-    ✅ **종합적 판단으로** 담보 인정 결정
+    ✅ **100% 안전만** 담보 인정
     """)
     
     st.markdown("---")
@@ -333,8 +396,42 @@ with st.sidebar:
         - 나스닥/NYSE 기준 미달
         - PTP 구조 (MLP/ETP)
         - 거래량 부족
-        - 변동성 극심 (시총별 차등)
+        - 변동성 극심
         - 고베타 (3.0 이상)
+        """)
+    
+    with st.expander("📊 국내주식 등급 기준"):
+        st.markdown("""
+        **시총 기준**:
+        - 초대형주: 10조 이상
+        - 대형주: 2조 ~ 10조
+        - 중형주: 3,000억 ~ 2조
+        - 중견주: 1,000억 ~ 3,000억
+        - 소형주: 500억 ~ 1,000억
+        - 극소형주: 500억 미만
+        
+        **변동성 기준**:
+        - 초대형/대형주: 500% 초과 불가
+        - 중형주: 300% 초과 불가
+        - 중견주: 250% 초과 불가
+        - 소형주: 200% 초과 불가
+        """)
+    
+    with st.expander("📊 해외주식 등급 기준"):
+        st.markdown("""
+        **시총 기준**:
+        - 초대형주: $50B 이상
+        - 대형주: $10B ~ $50B
+        - 중형주: $2B ~ $10B
+        - 중견주: $1B ~ $2B
+        - 소형주: $1B 미만
+        
+        **변동성 기준**:
+        - 초대형주: 300% 초과 불가
+        - 대형주: 250% 초과 불가
+        - 중형주: 200% 초과 불가
+        - 중견주: 150% 초과 불가
+        - 소형주: 100% 초과 불가
         """)
     
     with st.expander("⚙️ 2026년 강화 기준"):
@@ -348,15 +445,6 @@ with st.sidebar:
         - 시총 500억 이상만 인정
         """)
     
-    with st.expander("📊 해외주식 변동성 기준"):
-        st.markdown("""
-        **시총별 차등 적용**:
-        - 초대형주 ($50B 이상): 300% 초과 불가
-        - 대형주 ($10B~$50B): 200% 초과 불가
-        - 중형주 ($1B~$10B): 150% 초과 불가
-        - 소형주 ($1B 미만): 100% 초과 불가
-        """)
-    
     if st.button("🔄 캐시 초기화"):
         st.cache_data.clear()
         st.success("완료!")
@@ -364,7 +452,7 @@ with st.sidebar:
 # === 메인 ===
 
 st.title("🏦 핀드 담보 심사")
-st.caption("KB증권 하이브리드 계좌운용규칙 | v7.1 보수적 리스크 관리")
+st.caption("KB증권 하이브리드 계좌운용규칙 | v7.2 보수적 리스크 관리")
 
 with st.form(key='search_form', clear_on_submit=False):
     c1, c2, c3, c4 = st.columns([3, 1, 6, 1])
@@ -385,13 +473,20 @@ if search_button and ticker:
                 
                 st.markdown("---")
                 
+                # 판정
                 if analysis['eligible']:
                     st.success(f"## ✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 else:
                     st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 
-                st.markdown(f"**{data['name']}** | {data['market']} | {data['current_price']:,.0f}원 | 시총 {data['market_cap']:,.0f}억 | {analysis['cap_grade']} | 변동성 {analysis['volatility']:.1f}%")
+                # 기본 정보 (업종 추가)
+                sector_text = f" | {data.get('sector', 'N/A')}" if data.get('sector') != 'N/A' else ""
+                st.markdown(f"**{data['name']}** | {data['market']}{sector_text} | {data['current_price']:,.0f}원 | 시총 {data['market_cap']:,.0f}억 | {analysis['cap_grade']}")
                 
+                # 52주 주가 정보
+                st.markdown(f"📈 **52주 고가**: {data['high_52w']:,.0f}원 | **저가**: {data['low_52w']:,.0f}원 | **변동성**: {analysis['volatility']:.1f}% | **현재 위치**: {analysis['price_position']:.1f}%")
+                
+                # 불가 사유
                 if analysis['violations']:
                     st.markdown("### ❌ 담보 불가 사유")
                     for v in analysis['violations']:
@@ -400,6 +495,27 @@ if search_button and ticker:
                     st.markdown("### ⚠️ 주요 리스크")
                     for r in analysis['risk_factors']:
                         st.markdown(f"• {r}")
+                    
+                    # 심사 의견
+                    st.markdown("### 💼 심사 의견")
+                    st.markdown(f"""
+**변동성 리스크**: {'높음' if analysis['volatility'] > 200 else '보통'}
+- 52주 변동폭 {analysis['volatility']:.1f}%는 {analysis['cap_grade']}로서 {'매우 높은' if analysis['volatility'] > 300 else '높은'} 수준
+
+**현재가 위치**: {analysis['price_position']:.1f}% 지점
+- 최고가 대비 {100 - analysis['price_position']:.1f}% 하락 여력
+- 최저가 대비 {analysis['price_position']:.1f}% 상승한 상태
+
+**담보 설정 시 권장 조건**:
+1. 초기 담보비율: 150% 이상 권장 (통상 200%)
+2. 로스컷 비율: 140% (통상 130%)
+3. 일일 모니터링 필수
+4. 급락 시 추가 담보 요구 가능성 높음
+
+**최종 판정**: **담보 인정 불가**
+
+**근거**: {', '.join([v.replace('❌ ', '') for v in analysis['violations'][:2]])}
+                    """)
                 
             else:
                 st.error("❌ 조회 실패 - 30분 후 재시도")
@@ -413,13 +529,25 @@ if search_button and ticker:
                 
                 st.markdown("---")
                 
+                # 판정
                 if analysis['eligible']:
                     st.success(f"## ✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 else:
                     st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 
-                st.markdown(f"**{data['name']}** | {data['exchange']} | ${data['price']:.2f} | {data['mcap_label']} ${data['mcap']:.2f}B | 변동성 {analysis['volatility']:.1f}%")
+                # 기본 정보 (업종/산업 추가)
+                sector_text = ""
+                if data.get('sector') != 'N/A':
+                    sector_text = f" | {data['sector']}"
+                if data.get('industry') != 'N/A':
+                    sector_text += f" - {data['industry']}"
                 
+                st.markdown(f"**{data['name']}** | {data['exchange']}{sector_text} | ${data['price']:.2f} | {data['mcap_label']} ${data['mcap']:.2f}B | {analysis.get('cap_category', 'N/A')}")
+                
+                # 52주 주가 정보
+                st.markdown(f"📈 **52주 고가**: ${data['high_52w']:.2f} | **저가**: ${data['low_52w']:.2f} | **변동성**: {analysis['volatility']:.1f}% | **현재 위치**: {analysis['price_position']:.1f}%")
+                
+                # 불가 사유
                 if analysis['violations']:
                     st.markdown("### ❌ 담보 불가 사유")
                     for v in analysis['violations']:
@@ -428,6 +556,27 @@ if search_button and ticker:
                     st.markdown("### ⚠️ 주요 리스크")
                     for r in analysis['risk_factors']:
                         st.markdown(f"• {r}")
+                    
+                    # 심사 의견
+                    st.markdown("### 💼 심사 의견")
+                    st.markdown(f"""
+**변동성 리스크**: {'높음' if analysis['volatility'] > 150 else '보통'}
+- 52주 변동폭 {analysis['volatility']:.1f}%는 {analysis.get('cap_category', 'N/A')}로서 {'매우 높은' if analysis['volatility'] > 250 else '높은'} 수준
+
+**현재가 위치**: {analysis['price_position']:.1f}% 지점
+- 최고가 대비 {100 - analysis['price_position']:.1f}% 하락 여력
+- 최저가 대비 {analysis['price_position']:.1f}% 상승한 상태
+
+**담보 설정 시 권장 조건**:
+1. 초기 담보비율: 150% 이상 권장
+2. 로스컷 비율: 140%
+3. 일일 모니터링 필수
+4. 환율 변동 위험 별도 고려
+
+**최종 판정**: **담보 인정 불가**
+
+**근거**: {', '.join([v.replace('❌ ', '') for v in analysis['violations'][:2]])}
+                    """)
             else:
                 st.error("❌ 조회 실패 - 1시간 후 재시도")
 
@@ -435,4 +584,4 @@ elif search_button:
     st.error("❌ 종목코드를 입력하세요")
 
 st.markdown("---")
-st.caption("ⓒ 2026 FINDE | 리스크 관리 시스템 v7.1")
+st.caption("ⓒ 2026 FINDE | 리스크 관리 시스템 v7.2")
