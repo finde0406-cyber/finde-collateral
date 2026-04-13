@@ -109,16 +109,11 @@ def fetch_us_stock(ticker):
 # === 담보인정비율 계산 함수 ===
 
 def calculate_acceptance_ratio(violations, volatility, cap_grade):
-    """
-    담보인정비율 계산
-    - 불가 사유와 변동성에 따라 차등 적용
-    """
+    """담보인정비율 계산"""
     
-    # 상장폐지 리스크가 있으면 0%
     if any('관리종목' in v or '동전주' in v or '시총' in v for v in violations):
         return 0, "상장폐지 위험"
     
-    # 변동성 기준
     if volatility >= 400:
         return 0, "극심한 변동성 (400% 이상)"
     elif volatility >= 350:
@@ -150,17 +145,14 @@ def analyze_korean_stock(data):
     violations = []
     risk_factors = []
     
-    # 1. 관리종목
     if dept == '관리':
         violations.append("❌ 관리종목 지정 (상장폐지 심사 대상)")
         risk_factors.append("상장폐지 가능성 극히 높음")
     
-    # 2. 동전주
     if current_price < 1000:
         violations.append(f"❌ 동전주 {current_price:,.0f}원 (2026년 기준: 1,000원 미만 30일 연속 시 상폐)")
         risk_factors.append("30일 연속 시 관리종목 → 90일 내 미회복 시 상장폐지")
     
-    # 3. 시총
     if market_cap < 500:
         if market_cap < 100:
             violations.append(f"❌ 극소형주 시총 {market_cap:,.0f}억 (유동성 극히 낮음)")
@@ -172,28 +164,24 @@ def analyze_korean_stock(data):
             violations.append(f"❌ 시총 {market_cap:,.0f}억 (향후 300억 기준 강화 예정, 안전 마진 부족)")
             risk_factors.append("향후 기준 강화 시 퇴출 가능")
     
-    # 4. 백업 데이터
     if data.get('backup_warning'):
         violations.append("❌ 관리종목 여부 확인 불가 (백업 데이터 사용)")
         risk_factors.append("KRX 데이터 없어 관리종목 지정 여부 미확인")
     
-    # 5. 시총 등급 (순위 기준 근사치)
-    # 대형주: 상위 100위 (대략 5조 이상)
-    # 중형주: 상위 300위 (대략 5,000억~5조)
-    # 소형주: 301위 이하 (대략 5,000억 미만)
-    if market_cap >= 100000:  # 10조 이상 (초대형)
+    # 시총 등급 (순위 기준 근사치)
+    if market_cap >= 100000:
         cap_grade = "초대형주"
         volatility_limit = 500
-    elif market_cap >= 50000:  # 5조~10조 (대형 상위)
+    elif market_cap >= 50000:
         cap_grade = "대형주"
         volatility_limit = 500
-    elif market_cap >= 5000:  # 5,000억~5조 (중형)
+    elif market_cap >= 5000:
         cap_grade = "중형주"
         volatility_limit = 300
-    elif market_cap >= 500:  # 500억~5,000억 (소형)
+    elif market_cap >= 500:
         cap_grade = "소형주"
         volatility_limit = 200
-    else:  # 500억 미만
+    else:
         cap_grade = "극소형주"
         volatility_limit = 150
     
@@ -214,7 +202,7 @@ def analyze_korean_stock(data):
         else:
             risk_factors.append("저점권 위치 - 상승 여력 있으나 추가 하락 가능성도 존재")
     
-    # 담보인정비율 계산
+    # 담보인정비율
     acceptance_ratio, ratio_reason = calculate_acceptance_ratio(violations, volatility, cap_grade)
     
     # 최종 판정
@@ -264,7 +252,6 @@ def analyze_us_stock(data):
     
     allowed_exchanges = ["NYSE", "NASDAQ", "NYSE Arca"]
     
-    # 1~7 동일 (OTC, Penny Stock, 소형주, PTP, 거래량 등)
     if "OTC" in exchange.upper():
         violations.append("❌ OTC 장외시장")
         risk_factors.append("유동성 극히 낮고 가격 조작 위험")
@@ -312,7 +299,6 @@ def analyze_us_stock(data):
         violations.append(f"❌ 거래량 부족")
         risk_factors.append("매도 어려움")
     
-    # 8. 시총 등급
     if mcap >= 50:
         cap_category = "초대형주"
         volatility_limit = 300
@@ -329,7 +315,6 @@ def analyze_us_stock(data):
         cap_category = "극소형주"
         volatility_limit = 100
     
-    # 변동성 체크
     if volatility >= volatility_limit:
         violations.append(f"❌ 극심한 변동성 {volatility:.1f}% ({cap_category} 기준 {volatility_limit}% 초과)")
         risk_factors.append(f"52주 최고가 ${data['high_52w']:.2f} / 최저가 ${data['low_52w']:.2f}")
@@ -346,16 +331,13 @@ def analyze_us_stock(data):
         else:
             risk_factors.append("저점권 - 추가 하락 가능성")
     
-    # 9. 베타
     beta = data.get('beta', 0)
     if beta > 3.0:
         violations.append(f"❌ 고베타 {beta:.2f}")
         risk_factors.append("시장 대비 3배 변동")
     
-    # 담보인정비율 계산
     acceptance_ratio, ratio_reason = calculate_acceptance_ratio(violations, volatility, cap_category)
     
-    # 최종 판정
     if violations:
         judgment = "담보 인정 불가"
         risk_level = "🔴 높음"
@@ -381,7 +363,7 @@ def analyze_us_stock(data):
         'ratio_reason': ratio_reason
     }
 
-# === 사이드바 ===
+# === 사이드바 (간소화) ===
 
 with st.sidebar:
     st.title("🏦 핀드 담보 심사")
@@ -392,18 +374,26 @@ with st.sidebar:
     st.markdown("**국내**: `005930`  \n**해외**: `AAPL`")
     st.markdown("---")
     
-    st.error("### ⚠️ 보수적 리스크 관리")
-    st.markdown("""
-    **원칙**: 리스크관리 최우선
+    with st.expander("🔴 국내주식 불가 기준"):
+        st.markdown("""
+        **절대 불가**:
+        - 관리종목
+        - 동전주 (1,000원 미만)
+        - 시총 500억 미만
+        - 변동성 극심
+        """)
     
-    **의심스러우면 → 불가**  
-    **애매하면 → 불가**  
-    **위험 가능성 → 불가**
-    
-    ✅ **100% 안전만** 담보 인정
-    """)
-    
-    st.markdown("---")
+    with st.expander("🔴 해외주식 불가 기준"):
+        st.markdown("""
+        **절대 불가**:
+        - OTC/Pink Sheets
+        - Penny Stock ($5 미만)
+        - 소형주 ($1B 미만)
+        - 나스닥/NYSE 기준 미달
+        - PTP 구조 (MLP/ETP)
+        - 거래량 부족
+        - 변동성 극심
+        """)
     
     with st.expander("📊 국내주식 등급 기준"):
         st.markdown("""
@@ -412,7 +402,6 @@ with st.sidebar:
         - 대형주: 5조~10조 (상위 100위권)
         - 중형주: 5,000억~5조 (상위 300위권)
         - 소형주: 500억~5,000억 (301위 이하)
-        - 극소형주: 500억 미만
         
         **변동성 기준**:
         - 초대형/대형주: 500% 초과 불가
@@ -430,22 +419,18 @@ with st.sidebar:
         - 200~250%: 80%
         - 200% 미만: 100%
         
-        **상장폐지 리스크 있으면**: 0%
-        
         **예시**:
-        - 평가금액 1억원, 인정비율 70%
+        - 평가 1억원, 인정비율 70%
         - 실제 담보가치 7,000만원
         - 대출 가능 1.4억원 (LTV 200%)
         """)
     
-    with st.expander("⚙️ 계좌운용규칙"):
+    with st.expander("⚙️ 2026년 강화 기준"):
         st.markdown("""
-        **KB증권 하이브리드 기준**:
-        - 최대 LTV: 200%
-        - 로스컷: 130%
-        - 현금인출: 140% 이상
-        
-        ※ 모든 고객 동일 적용
+        **2026년 7월 시행**:
+        - 코스닥 시총 200억 미만 퇴출
+        - 동전주 (1,000원 미만 30일) 상폐
+        - 향후 300억 이상 강화 예정
         """)
     
     if st.button("🔄 캐시 초기화"):
@@ -455,7 +440,7 @@ with st.sidebar:
 # === 메인 ===
 
 st.title("🏦 핀드 담보 심사")
-st.caption("KB증권 하이브리드 계좌운용규칙 | v7.3 보수적 리스크 관리")
+st.caption("KB증권 하이브리드 계좌운용규칙 | v7.3")
 
 with st.form(key='search_form', clear_on_submit=False):
     c1, c2, c3, c4 = st.columns([3, 1, 6, 1])
@@ -476,24 +461,19 @@ if search_button and ticker:
                 
                 st.markdown("---")
                 
-                # 판정
                 if analysis['eligible']:
                     st.success(f"## ✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 else:
                     st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 
-                # 기본 정보
                 sector_text = f" | {data.get('sector', 'N/A')}" if data.get('sector') != 'N/A' else ""
                 st.markdown(f"**{data['name']}** | {data['market']}{sector_text} | {data['current_price']:,.0f}원 | 시총 {data['market_cap']:,.0f}억 | {analysis['cap_grade']}")
                 
-                # 52주 주가
                 st.markdown(f"📈 **52주 고가**: {data['high_52w']:,.0f}원 | **저가**: {data['low_52w']:,.0f}원 | **변동성**: {analysis['volatility']:.1f}% | **현재 위치**: {analysis['price_position']:.1f}%")
                 
-                # 담보인정비율 표시
                 if analysis['acceptance_ratio'] < 100:
                     st.warning(f"💰 **권장 담보인정비율**: {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})")
                 
-                # 불가 사유
                 if analysis['violations']:
                     st.markdown("### ❌ 담보 불가 사유")
                     for v in analysis['violations']:
@@ -503,7 +483,6 @@ if search_button and ticker:
                     for r in analysis['risk_factors']:
                         st.markdown(f"• {r}")
                     
-                    # 심사 의견
                     st.markdown("### 💼 심사 의견")
                     
                     st.markdown(f"""
@@ -516,34 +495,28 @@ if search_button and ticker:
 
 **담보 설정 시 리스크 관리**:
 
-1. **계좌운용규칙 기준 (필수)**
-   - 최대 대출비율(LTV): 200%
-   - 로스컷: 130%
-   - 현금인출 가능: 140% 이상
+**종목별 담보인정비율 (권장)** 🔥
+- **권장 인정비율: {analysis['acceptance_ratio']}%**
+- 사유: {analysis['ratio_reason']}
+- 실제 담보가치 = 평가금액 × {analysis['acceptance_ratio']}%
+- 예시: 1억원 평가 → {analysis['acceptance_ratio']*1000000:,.0f}원 인정 → 대출 가능 {analysis['acceptance_ratio']*2000000:,.0f}원 (LTV 200% 기준)
 
-2. **종목별 담보인정비율 (권장)** 🔥
-   - **권장 인정비율: {analysis['acceptance_ratio']}%**
-   - 사유: {analysis['ratio_reason']}
-   - 실제 담보가치 = 평가금액 × {analysis['acceptance_ratio']}%
-   - 예시: 1억원 평가 → {analysis['acceptance_ratio']*1000000:,.0f}원 인정
-   - 대출 가능: {analysis['acceptance_ratio']*2000000:,.0f}원 (LTV 200%)
-
-3. **일일 모니터링 필수**
-   - 변동성 높아 담보비율 급변 가능
-   - 추가 담보 요구 가능성 있음
+**일일 모니터링 필수**
+- 변동성 높아 담보비율 급변 가능
+- 추가 담보 요구 가능성 있음
 
 **최종 판정**: **담보 인정 불가**
 
 **불가 사유**: {', '.join([v.replace('❌ ', '') for v in analysis['violations'][:2]])}
 
-**참고**: DART 재무제표 확인 후 담보인정비율 조정 가능성 검토 필요
+※ 계좌운용규칙(LTV, 로스컷, 인출비율)은 상품 및 자산규모별로 상이하므로 별도 확인 필요  
+※ DART 재무제표 확인 후 담보인정비율 조정 가능성 검토 필요
                     """)
                 
             else:
                 st.error("❌ 조회 실패 - 30분 후 재시도")
     
     else:
-        # 해외주식 (동일한 로직)
         with st.spinner("분석 중..."):
             data = fetch_us_stock(ticker)
             
@@ -583,11 +556,17 @@ if search_button and ticker:
                     st.markdown(f"""
 **변동성 리스크**: {'매우 높음' if analysis['volatility'] > 250 else '높음' if analysis['volatility'] > 150 else '보통'}
 
+**현재가 위치**: {analysis['price_position']:.1f}% 지점
+
 **담보인정비율 (권장)**: **{analysis['acceptance_ratio']}%**
 - 사유: {analysis['ratio_reason']}
 - 예시: $100,000 평가 → ${analysis['acceptance_ratio']*1000:,.0f} 인정
 
+**일일 모니터링 필수**
+
 **최종 판정**: **담보 인정 불가**
+
+※ 계좌운용규칙은 상품별로 상이하므로 별도 확인 필요
                     """)
             else:
                 st.error("❌ 조회 실패 - 1시간 후 재시도")
