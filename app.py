@@ -91,12 +91,12 @@ with st.sidebar:
 st.title("🏦 핀드 담보 심사 시스템")
 st.caption(f"KB증권 하이브리드 계좌운용규칙 | v{VERSION}")
 
-with st.form(key='search_form', clear_on_submit=False):
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        ticker = st.text_input("종목코드/티커", placeholder="005930, AAPL", label_visibility="collapsed")
-    with c2:
-        search_button = st.form_submit_button("🔍 심사", use_container_width=True)
+# 입력창 - 컴팩트하게
+col1, col2, col3 = st.columns([2, 1, 3])
+with col1:
+    ticker = st.text_input("종목코드/티커", placeholder="005930, AAPL", label_visibility="collapsed")
+with col2:
+    search_button = st.button("🔍 심사", use_container_width=True, type="primary")
 
 if search_button and ticker:
     is_korean = ticker.isdigit() and len(ticker) == 6
@@ -137,72 +137,89 @@ if search_button and ticker:
                 else:
                     st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 
-                # 기본 정보
-                sector_text = f" | {data.get('sector', 'N/A')}" if data.get('sector') != 'N/A' else ""
-                st.markdown(f"**{data['name']}** | {data['market']}{sector_text} | {data['current_price']:,.0f}원 | 시총 {data['market_cap']:,.0f}억 | {analysis['cap_grade']}")
+                # 기본 정보 카드
+                info_col1, info_col2, info_col3 = st.columns(3)
                 
-                # 52주 정보
-                st.markdown(f"📈 **52주 고가**: {data['high_52w']:,.0f}원 | **저가**: {data['low_52w']:,.0f}원 | **변동성**: {analysis['volatility']:.1f}% | **현재 위치**: {analysis['price_position']:.1f}%")
+                with info_col1:
+                    st.metric("종목명", data['name'])
+                    st.caption(f"**{ticker}** · {data['market']}")
+                    if data.get('sector') != 'N/A':
+                        st.caption(f"업종: {data['sector']}")
                 
-                # 담보인정비율
+                with info_col2:
+                    st.metric("시가총액", f"{data['market_cap']:,.0f}억")
+                    st.caption(f"등급: **{analysis['cap_grade']}**")
+                    st.metric("현재가", f"{data['current_price']:,.0f}원")
+                
+                with info_col3:
+                    st.metric("변동성", f"{analysis['volatility']:.1f}%")
+                    st.caption(f"52주 고가: {data['high_52w']:,.0f}원")
+                    st.caption(f"52주 저가: {data['low_52w']:,.0f}원")
+                    st.caption(f"현재 위치: **{analysis['price_position']:.1f}%**")
+                
+                # 담보인정비율 (중요!)
                 if analysis['acceptance_ratio'] < 100:
-                    st.warning(f"💰 **권장 담보인정비율**: {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})")
+                    st.warning(f"### 💰 권장 담보인정비율: {analysis['acceptance_ratio']}%")
+                    st.caption(f"사유: {analysis['ratio_reason']}")
+                
+                st.markdown("---")
                 
                 # 불가 사유 및 리스크
                 if analysis['violations']:
-                    st.markdown("### ❌ 담보 불가 사유")
-                    for v in analysis['violations']:
-                        st.markdown(v)
+                    col_v1, col_v2 = st.columns(2)
                     
-                    st.markdown("### ⚠️ 주요 리스크")
-                    for r in analysis['risk_factors']:
-                        st.markdown(f"• {r}")
+                    with col_v1:
+                        st.markdown("### ❌ 담보 불가 사유")
+                        for v in analysis['violations']:
+                            st.markdown(v)
                     
-                    # 심사 의견
-                    st.markdown("### 💼 심사 의견")
-                    st.markdown(f"""
-**변동성 리스크**: {'매우 높음' if analysis['volatility'] > 300 else '높음' if analysis['volatility'] > 200 else '보통'}
+                    with col_v2:
+                        st.markdown("### ⚠️ 주요 리스크")
+                        for r in analysis['risk_factors']:
+                            st.markdown(f"• {r}")
+                    
+                    st.markdown("---")
+                    
+                    # 심사 의견 - 간결하게
+                    with st.expander("💼 심사 의견 (상세)", expanded=False):
+                        st.markdown(f"""
+**변동성 리스크**
 - 52주 변동폭 {analysis['volatility']:.1f}%는 {analysis['cap_grade']}로서 {'매우 높은' if analysis['volatility'] > 300 else '높은'} 수준
 
-**현재가 위치**: {analysis['price_position']:.1f}% 지점
+**현재가 위치**
+- 52주 범위 중 {analysis['price_position']:.1f}% 지점
 - 최고가 대비 {100 - analysis['price_position']:.1f}% 하락 여력
 - 최저가 대비 {analysis['price_position']:.1f}% 상승한 상태
 
-**담보 설정 시 리스크 관리**:
-
-**종목별 담보인정비율 (권장)** 🔥
-- **권장 인정비율: {analysis['acceptance_ratio']}%**
+**담보인정비율 (권장)**
+- 권장: **{analysis['acceptance_ratio']}%**
 - 사유: {analysis['ratio_reason']}
-- 실제 담보가치 = 평가금액 × {analysis['acceptance_ratio']}%
-- 예시: 1억원 평가 → {analysis['acceptance_ratio']*1000000:,.0f}원 인정 → 대출 가능 {analysis['acceptance_ratio']*2000000:,.0f}원
+- 예시: 1억원 평가 → {analysis['acceptance_ratio']*1000000:,.0f}원 인정
 
 **일일 모니터링 필수**
-- 변동성 높아 담보비율 급변 가능
-- 추가 담보 요구 가능성
 
-**최종 판정**: **{analysis['judgment']}**
-
-**불가 사유**: {', '.join([v.replace('❌ ', '') for v in analysis['violations'][:2]])}
-
-※ 계좌운용규칙(LTV, 로스컷)은 상품 및 자산규모별로 상이  
-※ DART 재무제표 확인 후 담보인정비율 조정 가능성 검토 필요
-                    """)
+※ 계좌운용규칙(LTV, 로스컷)은 상품별로 상이  
+※ DART 재무제표 확인 후 조정 가능성 검토
+                        """)
                 
                 # 엑셀 다운로드
                 st.markdown("---")
-                if st.button("📥 엑셀로 다운로드"):
-                    filename = export_to_excel(ticker, data, analysis)
-                    if filename:
-                        with open(filename, 'rb') as f:
-                            st.download_button(
-                                label="⬇️ 파일 다운로드",
-                                data=f,
-                                file_name=filename,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-                        st.success(f"✅ {filename} 생성 완료")
-                    else:
-                        st.error("엑셀 생성 실패")
+                col_d1, col_d2, col_d3 = st.columns([1, 1, 2])
+                with col_d1:
+                    if st.button("📥 엑셀로 다운로드", use_container_width=True):
+                        filename = export_to_excel(ticker, data, analysis)
+                        if filename:
+                            with open(filename, 'rb') as f:
+                                st.download_button(
+                                    label="⬇️ 파일 다운로드",
+                                    data=f,
+                                    file_name=filename,
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True
+                                )
+                            st.success(f"✅ 생성 완료")
+                        else:
+                            st.error("생성 실패")
                 
             except Exception as e:
                 st.error(f"❌ 시스템 오류: {str(e)}")
@@ -244,65 +261,88 @@ if search_button and ticker:
                 else:
                     st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
                 
-                # 기본 정보
-                sector_text = ""
-                if data.get('sector') != 'N/A':
-                    sector_text = f" | {data['sector']}"
-                if data.get('industry') != 'N/A':
-                    sector_text += f" - {data['industry']}"
+                # 기본 정보 카드
+                info_col1, info_col2, info_col3 = st.columns(3)
                 
-                st.markdown(f"**{data['name']}** | {data['exchange']}{sector_text} | ${data['price']:.2f} | {data['mcap_label']} ${data['mcap']:.2f}B | {analysis.get('cap_category', 'N/A')}")
+                with info_col1:
+                    st.metric("종목명", data['name'])
+                    st.caption(f"**{ticker.upper()}** · {data['exchange']}")
+                    if data.get('sector') != 'N/A':
+                        st.caption(f"{data['sector']}")
+                    if data.get('industry') != 'N/A':
+                        st.caption(f"{data['industry']}")
                 
-                # 52주 정보
-                st.markdown(f"📈 **52주 고가**: ${data['high_52w']:.2f} | **저가**: ${data['low_52w']:.2f} | **변동성**: {analysis['volatility']:.1f}% | **현재 위치**: {analysis['price_position']:.1f}%")
+                with info_col2:
+                    st.metric(data['mcap_label'], f"${data['mcap']:.2f}B")
+                    st.caption(f"등급: **{analysis.get('cap_category', 'N/A')}**")
+                    st.metric("현재가", f"${data['price']:.2f}")
+                
+                with info_col3:
+                    st.metric("변동성", f"{analysis['volatility']:.1f}%")
+                    st.caption(f"52주 고가: ${data['high_52w']:.2f}")
+                    st.caption(f"52주 저가: ${data['low_52w']:.2f}")
+                    st.caption(f"현재 위치: **{analysis['price_position']:.1f}%**")
                 
                 # 담보인정비율
                 if analysis['acceptance_ratio'] < 100:
-                    st.warning(f"💰 **권장 담보인정비율**: {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})")
+                    st.warning(f"### 💰 권장 담보인정비율: {analysis['acceptance_ratio']}%")
+                    st.caption(f"사유: {analysis['ratio_reason']}")
+                
+                st.markdown("---")
                 
                 # 불가 사유 및 리스크
                 if analysis['violations']:
-                    st.markdown("### ❌ 담보 불가 사유")
-                    for v in analysis['violations']:
-                        st.markdown(v)
+                    col_v1, col_v2 = st.columns(2)
                     
-                    st.markdown("### ⚠️ 주요 리스크")
-                    for r in analysis['risk_factors']:
-                        st.markdown(f"• {r}")
+                    with col_v1:
+                        st.markdown("### ❌ 담보 불가 사유")
+                        for v in analysis['violations']:
+                            st.markdown(v)
+                    
+                    with col_v2:
+                        st.markdown("### ⚠️ 주요 리스크")
+                        for r in analysis['risk_factors']:
+                            st.markdown(f"• {r}")
+                    
+                    st.markdown("---")
                     
                     # 심사 의견
-                    st.markdown("### 💼 심사 의견")
-                    st.markdown(f"""
-**변동성 리스크**: {'매우 높음' if analysis['volatility'] > 250 else '높음' if analysis['volatility'] > 150 else '보통'}
+                    with st.expander("💼 심사 의견 (상세)", expanded=False):
+                        st.markdown(f"""
+**변동성 리스크**
+- 52주 변동폭 {analysis['volatility']:.1f}%
 
-**현재가 위치**: {analysis['price_position']:.1f}% 지점
+**현재가 위치**
+- 52주 범위 중 {analysis['price_position']:.1f}% 지점
 
-**담보인정비율 (권장)**: **{analysis['acceptance_ratio']}%**
+**담보인정비율 (권장)**
+- 권장: **{analysis['acceptance_ratio']}%**
 - 사유: {analysis['ratio_reason']}
 - 예시: $100,000 평가 → ${analysis['acceptance_ratio']*1000:,.0f} 인정
 
 **일일 모니터링 필수**
 
-**최종 판정**: **{analysis['judgment']}**
-
 ※ 계좌운용규칙은 상품별로 상이
-                    """)
+                        """)
                 
                 # 엑셀 다운로드
                 st.markdown("---")
-                if st.button("📥 엑셀로 다운로드"):
-                    filename = export_to_excel(ticker, data, analysis)
-                    if filename:
-                        with open(filename, 'rb') as f:
-                            st.download_button(
-                                label="⬇️ 파일 다운로드",
-                                data=f,
-                                file_name=filename,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-                        st.success(f"✅ {filename} 생성 완료")
-                    else:
-                        st.error("엑셀 생성 실패")
+                col_d1, col_d2, col_d3 = st.columns([1, 1, 2])
+                with col_d1:
+                    if st.button("📥 엑셀로 다운로드", use_container_width=True):
+                        filename = export_to_excel(ticker, data, analysis)
+                        if filename:
+                            with open(filename, 'rb') as f:
+                                st.download_button(
+                                    label="⬇️ 파일 다운로드",
+                                    data=f,
+                                    file_name=filename,
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True
+                                )
+                            st.success(f"✅ 생성 완료")
+                        else:
+                            st.error("생성 실패")
                 
             except Exception as e:
                 st.error(f"❌ 시스템 오류: {str(e)}")
@@ -313,4 +353,3 @@ elif search_button:
 
 st.markdown("---")
 st.caption(f"ⓒ 2026 FINDE | 리스크 관리 시스템 v{VERSION}")
-   # v8.0 업데이트
