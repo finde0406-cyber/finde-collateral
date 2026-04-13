@@ -138,34 +138,33 @@ if search_button and ticker:
                 else:
                     st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
                 
-                # 기본 정보 카드
-                info_col1, info_col2, info_col3 = st.columns(3)
-
-                with info_col1:
-                    st.markdown(f"**종목명**")
-                    st.markdown(f"#### {data['name']}")
-                    st.caption(f"{ticker} · {data['market']}")
-                    if data.get('sector') != 'N/A':
-                        st.caption(f"업종: {data['sector']}")
+                # 종목 헤더 박스
+                sector_text = f" · {data.get('sector', '')}" if data.get('sector') != 'N/A' else ""
+                st.info(f"**{data['name']} ({ticker})**  \n{data['market']} · {analysis['cap_grade']}{sector_text}")
                 
-                with info_col2:
-                    st.markdown(f"**시가총액**")
-                    st.markdown(f"#### {data['market_cap']:,.0f}억")
-                    st.caption(f"등급: {analysis['cap_grade']}")
-                    st.markdown(f"**현재가**")
-                    st.markdown(f"#### {data['current_price']:,.0f}원")
+                # 핵심 지표 그리드
+                grid_col1, grid_col2, grid_col3, grid_col4 = st.columns(4)
                 
-                with info_col3:
-                    st.markdown(f"**변동성**")
-                    st.markdown(f"#### {analysis['volatility']:.1f}%")
-                    st.caption(f"52주 고가: {data['high_52w']:,.0f}원")
-                    st.caption(f"52주 저가: {data['low_52w']:,.0f}원")
-                    st.caption(f"현재 위치: {analysis['price_position']:.1f}%")
+                with grid_col1:
+                    st.markdown("**시총**")
+                    st.markdown(f"**{data['market_cap']:,.0f}억**")
                 
-                # 담보인정비율 (중요!)
+                with grid_col2:
+                    st.markdown("**현재가**")
+                    st.markdown(f"**{data['current_price']:,.0f}원**")
+                
+                with grid_col3:
+                    st.markdown("**변동성**")
+                    st.markdown(f"**{analysis['volatility']:.1f}%**")
+                
+                with grid_col4:
+                    st.markdown("**52주 범위**")
+                    st.markdown(f"**{data['high_52w']:,.0f} ~ {data['low_52w']:,.0f}원**")
+                    st.caption(f"현재 위치 {analysis['price_position']:.1f}%")
+                
+                # 담보인정비율
                 if analysis['acceptance_ratio'] < 100:
-                    st.warning(f"**💰 권장 담보인정비율: {analysis['acceptance_ratio']}%**")
-                    st.caption(f"사유: {analysis['ratio_reason']}")
+                    st.warning(f"**💰 담보인정비율 {analysis['acceptance_ratio']}%** ({analysis['ratio_reason']})")
                 
                 st.markdown("---")
                 
@@ -174,12 +173,12 @@ if search_button and ticker:
                     col_v1, col_v2 = st.columns(2)
                     
                     with col_v1:
-                        st.markdown("#### ❌ 담보 불가 사유")
+                        st.markdown("**❌ 담보 불가 사유**")
                         for v in analysis['violations']:
-                            st.markdown(v)
+                            st.markdown(f"• {v.replace('❌ ', '')}")
                     
                     with col_v2:
-                        st.markdown("#### ⚠️ 주요 리스크")
+                        st.markdown("**⚠️ 주요 리스크**")
                         for r in analysis['risk_factors']:
                             st.markdown(f"• {r}")
                     
@@ -266,36 +265,38 @@ if search_button and ticker:
                 else:
                     st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
                 
-                # 기본 정보 카드
-                info_col1, info_col2, info_col3 = st.columns(3)
+                # 종목 헤더 박스
+                sector_text = ""
+                if data.get('sector') != 'N/A':
+                    sector_text += f" · {data['sector']}"
+                if data.get('industry') != 'N/A':
+                    sector_text += f" · {data['industry']}"
                 
-                with info_col1:
-                    st.markdown(f"**종목명**")
-                    st.markdown(f"#### {data['name']}")
-                    st.caption(f"{ticker.upper()} · {data['exchange']}")
-                    if data.get('sector') != 'N/A':
-                        st.caption(f"{data['sector']}")
-                    if data.get('industry') != 'N/A':
-                        st.caption(f"{data['industry']}")
+                st.info(f"**{data['name']} ({ticker.upper()})**  \n{data['exchange']} · {analysis.get('cap_category', 'N/A')}{sector_text}")
                 
-                with info_col2:
+                # 핵심 지표 그리드
+                grid_col1, grid_col2, grid_col3, grid_col4 = st.columns(4)
+                
+                with grid_col1:
                     st.markdown(f"**{data['mcap_label']}**")
-                    st.markdown(f"#### ${data['mcap']:.2f}B")
-                    st.caption(f"등급: {analysis.get('cap_category', 'N/A')}")
-                    st.markdown(f"**현재가**")
-                    st.markdown(f"#### ${data['price']:.2f}")
+                    st.markdown(f"**${data['mcap']:.2f}B**")
                 
-                with info_col3:
-                    st.markdown(f"**변동성**")
-                    st.markdown(f"#### {analysis['volatility']:.1f}%")
-                    st.caption(f"52주 고가: ${data['high_52w']:.2f}")
-                    st.caption(f"52주 저가: ${data['low_52w']:.2f}")
-                    st.caption(f"현재 위치: {analysis['price_position']:.1f}%")
+                with grid_col2:
+                    st.markdown("**현재가**")
+                    st.markdown(f"**${data['price']:.2f}**")
+                
+                with grid_col3:
+                    st.markdown("**변동성**")
+                    st.markdown(f"**{analysis['volatility']:.1f}%**")
+                
+                with grid_col4:
+                    st.markdown("**52주 범위**")
+                    st.markdown(f"**${data['high_52w']:.2f} ~ ${data['low_52w']:.2f}**")
+                    st.caption(f"현재 위치 {analysis['price_position']:.1f}%")
                 
                 # 담보인정비율
                 if analysis['acceptance_ratio'] < 100:
-                    st.warning(f"**💰 권장 담보인정비율: {analysis['acceptance_ratio']}%**")
-                    st.caption(f"사유: {analysis['ratio_reason']}")
+                    st.warning(f"**💰 담보인정비율 {analysis['acceptance_ratio']}%** ({analysis['ratio_reason']})")
                 
                 st.markdown("---")
                 
@@ -304,12 +305,12 @@ if search_button and ticker:
                     col_v1, col_v2 = st.columns(2)
                     
                     with col_v1:
-                        st.markdown("#### ❌ 담보 불가 사유")
+                        st.markdown("**❌ 담보 불가 사유**")
                         for v in analysis['violations']:
-                            st.markdown(v)
+                            st.markdown(f"• {v.replace('❌ ', '')}")
                     
                     with col_v2:
-                        st.markdown("#### ⚠️ 주요 리스크")
+                        st.markdown("**⚠️ 주요 리스크**")
                         for r in analysis['risk_factors']:
                             st.markdown(f"• {r}")
                     
