@@ -134,9 +134,9 @@ if search_button and ticker:
                 
                 # 판정 표시
                 if analysis['eligible']:
-                    st.success(f"## ✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
+                    st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
                 else:
-                    st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
+                    st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
                 
                 # 기본 정보 카드
                 info_col1, info_col2, info_col3 = st.columns(3)
@@ -164,8 +164,8 @@ if search_button and ticker:
                 
                 # 담보인정비율 (중요!)
                 if analysis['acceptance_ratio'] < 100:
-                    st.warning(f"### 💰 권장 담보인정비율: {analysis['acceptance_ratio']}%")
-                    st.caption(f"사유: {analysis['ratio_reason']}")
+                    st.warning(f"**💰 권장 담보인정비율: {analysis['acceptance_ratio']}%**")
+                    st.caption(f"사유: {analysis['ratio_reason']}"))
                 
                 st.markdown("---")
                 
@@ -174,12 +174,12 @@ if search_button and ticker:
                     col_v1, col_v2 = st.columns(2)
                     
                     with col_v1:
-                        st.markdown("### ❌ 담보 불가 사유")
+                        st.markdown("#### ❌ 담보 불가 사유")
                         for v in analysis['violations']:
                             st.markdown(v)
                     
                     with col_v2:
-                        st.markdown("### ⚠️ 주요 리스크")
+                        st.markdown("#### ⚠️ 주요 리스크")
                         for r in analysis['risk_factors']:
                             st.markdown(f"• {r}")
                     
@@ -262,9 +262,9 @@ if search_button and ticker:
                 
                 # 판정 표시
                 if analysis['eligible']:
-                    st.success(f"## ✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
+                    st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
                 else:
-                    st.error(f"## ⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}")
+                    st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
                 
                 # 기본 정보 카드
                 info_col1, info_col2, info_col3 = st.columns(3)
@@ -294,7 +294,7 @@ if search_button and ticker:
                 
                 # 담보인정비율
                 if analysis['acceptance_ratio'] < 100:
-                    st.warning(f"### 💰 권장 담보인정비율: {analysis['acceptance_ratio']}%")
+                    st.warning(f"**💰 권장 담보인정비율: {analysis['acceptance_ratio']}%**")
                     st.caption(f"사유: {analysis['ratio_reason']}")
                 
                 st.markdown("---")
@@ -304,12 +304,12 @@ if search_button and ticker:
                     col_v1, col_v2 = st.columns(2)
                     
                     with col_v1:
-                        st.markdown("### ❌ 담보 불가 사유")
+                        st.markdown("#### ❌ 담보 불가 사유")
                         for v in analysis['violations']:
                             st.markdown(v)
                     
                     with col_v2:
-                        st.markdown("### ⚠️ 주요 리스크")
+                        st.markdown("#### ⚠️ 주요 리스크")
                         for r in analysis['risk_factors']:
                             st.markdown(f"• {r}")
                     
