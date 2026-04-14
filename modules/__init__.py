@@ -9,6 +9,11 @@ from .utils import (
     save_screening_log,
     export_to_excel
 )
+from .rms_comparator import (
+    save_rms_data,
+    load_rms_data,
+    get_rms_status
+)
 
 __all__ = [
     'fetch_korean_stock',
@@ -18,5 +23,8 @@ __all__ = [
     'validate_korean_stock_data',
     'validate_us_stock_data',
     'save_screening_log',
-    'export_to_excel'
+    'export_to_excel',
+    'save_rms_data',
+    'load_rms_data',
+    'get_rms_status',
 ]
