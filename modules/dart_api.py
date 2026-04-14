@@ -1,16 +1,18 @@
 """
 DART API 연동
-- 재무제표 (자본총계, 부채총계, 매출액, 영업이익 최근 3년)
+- 재무제표 (최근 2년으로 단축 - 속도 개선)
 - 감사의견
 - 위험 공시 탐지
+- st.cache_data로 캐싱 (같은 종목 재조회 시 즉시 반환)
 """
 import requests
+import streamlit as st
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from config import DART_API_KEY
 
 BASE_URL = "https://opendart.fss.or.kr/api"
 
-# 위험 키워드 (공시 제목에서 탐지)
 RISK_KEYWORDS = [
     '관리종목', '상장폐지', '거래정지', '횡령', '배임',
     '감자', '워크아웃', '법정관리', '회생', '부도',
@@ -19,23 +21,19 @@ RISK_KEYWORDS = [
 
 
 def is_available() -> bool:
-    """DART API Key 설정 여부 확인"""
     return DART_API_KEY is not None and DART_API_KEY != ""
 
 
+@st.cache_data(ttl=3600)
 def fetch_corp_code(stock_code: str):
-    """
-    종목코드 → DART 고유번호(corp_code) 조회
-    """
+    """종목코드 → DART 고유번호 조회 (1시간 캐시)"""
     try:
-        url = f"{BASE_URL}/company.json"
-        params = {
-            'crtfc_key': DART_API_KEY,
-            'stock_code': stock_code
-        }
-        res = requests.get(url, params=params, timeout=10)
+        res  = requests.get(
+            f"{BASE_URL}/company.json",
+            params={'crtfc_key': DART_API_KEY, 'stock_code': stock_code},
+            timeout=5
+        )
         data = res.json()
-
         if data.get('status') == '000':
             return data.get('corp_code')
         return None
@@ -43,44 +41,33 @@ def fetch_corp_code(stock_code: str):
         return None
 
 
-def fetch_financial_data(corp_code: str) -> list:
-    """
-    최근 3년 주요 재무 데이터 조회
-    반환: [{'year': 2024, 'equity': ..., 'debt': ..., 'revenue': ..., 'op_income': ...}, ...]
-    """
-    results = []
-    current_year = datetime.now().year
-
-    for year in range(current_year - 1, current_year - 4, -1):
+@st.cache_data(ttl=3600)
+def fetch_financial_year(corp_code: str, year: int):
+    """특정 연도 재무데이터 조회 (1시간 캐시)"""
+    for fs_div in ['CFS', 'OFS']:
         try:
-            url = f"{BASE_URL}/fnlttSinglAcnt.json"
-            params = {
-                'crtfc_key' : DART_API_KEY,
-                'corp_code' : corp_code,
-                'bsns_year' : str(year),
-                'reprt_code': '11011',  # 사업보고서
-                'fs_div'    : 'CFS',    # 연결재무제표 우선
-            }
-            res = requests.get(url, params=params, timeout=10)
+            res  = requests.get(
+                f"{BASE_URL}/fnlttSinglAcnt.json",
+                params={
+                    'crtfc_key' : DART_API_KEY,
+                    'corp_code' : corp_code,
+                    'bsns_year' : str(year),
+                    'reprt_code': '11011',
+                    'fs_div'    : fs_div,
+                },
+                timeout=5
+            )
             data = res.json()
-
-            # 연결재무제표 없으면 별도재무제표 시도
-            if data.get('status') != '000':
-                params['fs_div'] = 'OFS'
-                res = requests.get(url, params=params, timeout=10)
-                data = res.json()
-
             if data.get('status') != '000':
                 continue
 
             items = data.get('list', [])
-            row = {'year': year, 'equity': None, 'debt': None,
-                   'revenue': None, 'op_income': None}
+            row   = {'year': year, 'equity': None, 'debt': None,
+                     'revenue': None, 'op_income': None}
 
             for item in items:
-                account = item.get('account_nm', '')
+                account    = item.get('account_nm', '')
                 amount_str = item.get('thstrm_amount', '').replace(',', '').replace(' ', '')
-
                 try:
                     amount = int(amount_str) if amount_str and amount_str != '-' else None
                 except ValueError:
@@ -96,125 +83,133 @@ def fetch_financial_data(corp_code: str) -> list:
                     row['op_income'] = amount
 
             if any(v is not None for v in [row['equity'], row['debt']]):
-                results.append(row)
-
+                return row
         except Exception:
             continue
+    return None
 
-    return results
+
+@st.cache_data(ttl=3600)
+def fetch_financial_data(corp_code: str) -> list:
+    """최근 2년 재무데이터 병렬 조회 (1시간 캐시)"""
+    current_year = datetime.now().year
+    years        = [current_year - 1, current_year - 2]
+
+    results = []
+    # 병렬 조회로 속도 개선
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = {executor.submit(fetch_financial_year, corp_code, y): y for y in years}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                results.append(result)
+
+    return sorted(results, key=lambda x: x['year'], reverse=True)
 
 
+@st.cache_data(ttl=3600)
 def fetch_audit_opinion(corp_code: str) -> dict:
-    """
-    최근 감사의견 조회
-    반환: {'opinion': '적정'/'한정'/'부적정'/'의견거절', 'year': 2024}
-    """
+    """최근 감사의견 조회 (1시간 캐시)"""
     try:
-        # 감사보고서 공시 검색
-        url = f"{BASE_URL}/list.json"
-        params = {
-            'crtfc_key'  : DART_API_KEY,
-            'corp_code'  : corp_code,
-            'pblntf_ty'  : 'A',   # 정기공시
-            'pblntf_detail_ty': 'A001',  # 사업보고서
-            'page_count' : 5,
-        }
-        res = requests.get(url, params=params, timeout=10)
+        res  = requests.get(
+            f"{BASE_URL}/list.json",
+            params={
+                'crtfc_key'          : DART_API_KEY,
+                'corp_code'          : corp_code,
+                'pblntf_ty'          : 'A',
+                'pblntf_detail_ty'   : 'A001',
+                'page_count'         : 3,
+            },
+            timeout=5
+        )
         data = res.json()
 
-        if data.get('status') != '000':
+        if data.get('status') != '000' or not data.get('list'):
             return {'opinion': None, 'year': None}
 
-        disclosures = data.get('list', [])
-        if not disclosures:
-            return {'opinion': None, 'year': None}
-
-        # 가장 최근 사업보고서의 감사의견 조회
-        latest = disclosures[0]
+        latest = data['list'][0]
         rcp_no = latest.get('rcept_no')
 
-        url2 = f"{BASE_URL}/fnlttAuditOpinion.json"
-        params2 = {
-            'crtfc_key': DART_API_KEY,
-            'rcept_no' : rcp_no,
-        }
-        res2 = requests.get(url2, params=params2, timeout=10)
+        res2  = requests.get(
+            f"{BASE_URL}/fnlttAuditOpinion.json",
+            params={'crtfc_key': DART_API_KEY, 'rcept_no': rcp_no},
+            timeout=5
+        )
         data2 = res2.json()
 
         if data2.get('status') == '000' and data2.get('list'):
             opinion_data = data2['list'][0]
-            opinion = opinion_data.get('opinion', '')
-            year = latest.get('rcept_dt', '')[:4]
-            return {'opinion': opinion, 'year': year}
-
+            return {
+                'opinion': opinion_data.get('opinion', ''),
+                'year'   : latest.get('rcept_dt', '')[:4]
+            }
         return {'opinion': None, 'year': None}
-
     except Exception:
         return {'opinion': None, 'year': None}
 
 
+@st.cache_data(ttl=3600)
 def fetch_risk_disclosures(corp_code: str) -> list:
-    """
-    최근 1년 위험 공시 탐지
-    반환: [{'date': '20260101', 'title': '...'}, ...]
-    """
+    """최근 1년 위험 공시 탐지 (1시간 캐시)"""
     try:
-        today = datetime.now()
+        today  = datetime.now()
         bgn_de = f"{today.year - 1}{today.month:02d}{today.day:02d}"
         end_de = today.strftime('%Y%m%d')
 
-        url = f"{BASE_URL}/list.json"
-        params = {
-            'crtfc_key' : DART_API_KEY,
-            'corp_code' : corp_code,
-            'bgn_de'    : bgn_de,
-            'end_de'    : end_de,
-            'page_count': 20,
-        }
-        res = requests.get(url, params=params, timeout=10)
+        res  = requests.get(
+            f"{BASE_URL}/list.json",
+            params={
+                'crtfc_key' : DART_API_KEY,
+                'corp_code' : corp_code,
+                'bgn_de'    : bgn_de,
+                'end_de'    : end_de,
+                'page_count': 20,
+            },
+            timeout=5
+        )
         data = res.json()
 
         if data.get('status') != '000':
             return []
 
-        risk_list = []
-        for item in data.get('list', []):
-            title = item.get('report_nm', '')
-            if any(kw in title for kw in RISK_KEYWORDS):
-                risk_list.append({
-                    'date' : item.get('rcept_dt', ''),
-                    'title': title
-                })
-
-        return risk_list
-
+        return [
+            {'date': item.get('rcept_dt', ''), 'title': item.get('report_nm', '')}
+            for item in data.get('list', [])
+            if any(kw in item.get('report_nm', '') for kw in RISK_KEYWORDS)
+        ]
     except Exception:
         return []
 
 
+@st.cache_data(ttl=3600)
 def get_dart_analysis(stock_code: str) -> dict:
     """
-    메인 함수 — 종목코드로 DART 전체 분석 실행
-    반환: {
-        'available': bool,
-        'corp_code': str,
-        'financial': [...],
-        'audit': {...},
-        'risk_disclosures': [...],
-        'error': str or None
-    }
+    메인 함수 — DART 전체 분석 (1시간 캐시)
+    재무/감사/공시 병렬 조회로 속도 개선
     """
     if not is_available():
         return {'available': False, 'error': 'API Key 미설정'}
 
     corp_code = fetch_corp_code(stock_code)
     if not corp_code:
-        return {'available': True, 'corp_code': None, 'error': '기업 정보 없음',
-                'financial': [], 'audit': {}, 'risk_disclosures': []}
+        return {
+            'available'       : True,
+            'corp_code'       : None,
+            'error'           : '기업 정보 없음',
+            'financial'       : [],
+            'audit'           : {},
+            'risk_disclosures': []
+        }
 
-    financial        = fetch_financial_data(corp_code)
-    audit            = fetch_audit_opinion(corp_code)
-    risk_disclosures = fetch_risk_disclosures(corp_code)
+    # 재무/감사/공시 병렬 조회
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        f_financial = executor.submit(fetch_financial_data, corp_code)
+        f_audit     = executor.submit(fetch_audit_opinion, corp_code)
+        f_risk      = executor.submit(fetch_risk_disclosures, corp_code)
+
+        financial        = f_financial.result()
+        audit            = f_audit.result()
+        risk_disclosures = f_risk.result()
 
     return {
         'available'       : True,
