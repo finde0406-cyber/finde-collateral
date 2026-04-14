@@ -86,8 +86,11 @@ def fetch_us_stock(ticker):
 
         # ── 1. 기업 프로필 ────────────────────────────────────
         profile = client.company_profile2(symbol=symbol)
-        if not profile or not profile.get('name'):
+        if not profile:
             return {'success': False, 'error': '종목 정보 없음'}
+        # ETF는 name이 없을 수 있어서 ticker로 대체
+        if not profile.get('name'):
+            profile['name'] = symbol
 
         # ── 2. 실시간 시세 ────────────────────────────────────
         quote = client.quote(symbol)
@@ -141,12 +144,15 @@ def fetch_us_stock(ticker):
             'NYSE'                       : 'NYSE',
             'NYSE AMERICAN'              : 'NYSE',
             'NYSE ARCA'                  : 'NYSE Arca',
+            'BATS'                       : 'NYSE Arca',
+            'CBOE BZX'                   : 'NYSE Arca',
         }
         exchange = exchange_map.get(exchange_raw.upper(), exchange_raw)
 
         # 종목 유형
         finn_type  = profile.get('finnhubIndustry', 'N/A')
-        quote_type = 'ETF' if 'ETF' in finn_type.upper() or 'FUND' in finn_type.upper() else 'EQUITY'
+        etf_keywords = ['ETF', 'FUND', 'TRUST', 'PROSHARES', 'DIREXION', 'ISHARES', 'INVESCO']
+        quote_type = 'ETF' if any(kw in finn_type.upper() or kw in symbol.upper() for kw in etf_keywords) else 'EQUITY'
 
         # ETF는 AUM, 주식은 시총
         if quote_type == 'ETF':
