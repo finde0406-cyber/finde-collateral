@@ -7,10 +7,11 @@ from .utils import (
     validate_korean_stock_data,
     validate_us_stock_data,
     save_screening_log,
-    export_to_excel
 )
 from .rms_comparator import (
     parse_rms_excel,
+    load_rms_from_server,
+    save_rms_to_server,
     get_rms_status
 )
 from .dart_api import get_dart_analysis
@@ -23,8 +24,9 @@ __all__ = [
     'validate_korean_stock_data',
     'validate_us_stock_data',
     'save_screening_log',
-    'export_to_excel',
     'parse_rms_excel',
+    'load_rms_from_server',
+    'save_rms_to_server',
     'get_rms_status',
     'get_dart_analysis',
 ]
