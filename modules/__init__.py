@@ -1,7 +1,7 @@
 """
 핀드 담보 심사 모듈
 """
-from .data_fetcher import fetch_korean_stock, fetch_us_stock
+from .data_fetcher import fetch_korean_stock, fetch_us_stock, find_ticker_by_name
 from .risk_analyzer import analyze_korean_stock, analyze_us_stock
 from .utils import (
     validate_korean_stock_data,
@@ -25,6 +25,7 @@ from .holdings_manager import (
 
 __all__ = [
     'fetch_korean_stock',
+    'find_ticker_by_name',
     'fetch_us_stock',
     'analyze_korean_stock',
     'analyze_us_stock',
