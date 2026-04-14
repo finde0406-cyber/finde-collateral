@@ -23,7 +23,7 @@ def is_available() -> bool:
     return DART_API_KEY is not None and DART_API_KEY != ""
 
 
-def fetch_corp_code(stock_code: str) -> str | None:
+def fetch_corp_code(stock_code: str):
     """
     종목코드 → DART 고유번호(corp_code) 조회
     """
