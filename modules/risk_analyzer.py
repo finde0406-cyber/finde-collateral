@@ -354,7 +354,7 @@ def analyze_us_stock(data):
 
     min_mcap = US_STOCK['min_market_cap']
     if quote_type == "ETF":
-        # ETF는 AUM 조회 실패 시 시총 기준 심사 제외
+        # ETF는 AUM 확인된 경우만 소규모 체크, 0이면 조회실패로 간주하고 통과
         if mcap > 0 and mcap < 0.1:
             violations.append("❌ 소규모 ETF (AUM $0.1B 미만)")
     else:
