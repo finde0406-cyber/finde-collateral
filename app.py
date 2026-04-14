@@ -115,8 +115,8 @@ with st.sidebar:
             st.session_state['rms_total']       = len(df_rms)
             st.session_state['rms_normal']      = int((df_rms['RMS상태'] == '정상').sum())
             st.session_state['rms_restricted']  = int((df_rms['RMS상태'] != '정상').sum())
-            st.write("=== 디버그: 전체 샘플 ===")
-            st.write(df_rms.head(10))
+            st.write("=== 디버그: 원본코드 확인 ===")
+            st.write(df_rms['종목코드_원본'].head(10).tolist()))
             # st.rerun()  ← 임시 주석처리
         except Exception as e:
             st.error(f"❌ 업로드 실패: {e}")
