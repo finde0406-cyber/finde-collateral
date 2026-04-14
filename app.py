@@ -51,13 +51,13 @@ def render_rms_result(ticker: str, screen_eligible: bool):
     )
 
     if screen_ok and rms_ok:
-        st.success(f"🟢 {rms_status_text}\n\n✅ RMS 일치 — 정상\n\n‎")
+        st.success(f"🟢 {rms_status_text}\n\n✅ RMS 일치 — 정상")
     elif not screen_ok and not rms_ok:
-        st.error(f"🔴 {rms_status_text}\n\n✅ RMS 일치 — 협의 불가\n\n‎")
+        st.error(f"🔴 {rms_status_text}\n\n✅ RMS 일치 — 협의 불가")
     elif not screen_ok and rms_ok:
-        st.error(f"🟢 {rms_status_text}\n\n🚨 불일치 — RMS 매수금지 재설정 검토 필요\n\n‎")
+        st.error(f"🟢 {rms_status_text}\n\n🚨 불일치 — RMS 매수금지 재설정 검토 필요")
     else:
-        st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요\n\n‎")
+        st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -223,9 +223,9 @@ if search_button and ticker:
                 col_j, col_r = st.columns(2)
                 with col_j:
                     if analysis['eligible']:
-                        st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
+                        st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**\n\n담보 설정 가능 종목입니다.")
                     else:
-                        st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
+                        st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**\n\n담보 설정이 불가한 종목입니다.")
                 with col_r:
                     render_rms_result(ticker, analysis['eligible'])
 
@@ -328,9 +328,9 @@ if search_button and ticker:
                 col_j, col_r = st.columns(2)
                 with col_j:
                     if analysis['eligible']:
-                        st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
+                        st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**\n\n담보 설정 가능 종목입니다.")
                     else:
-                        st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
+                        st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**\n\n담보 설정이 불가한 종목입니다.")
                 with col_r:
                     render_rms_result(ticker.upper(), analysis['eligible'])
 
