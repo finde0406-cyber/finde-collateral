@@ -18,11 +18,15 @@ from modules import (
     save_rms_to_server,
     get_rms_status,
     get_dart_analysis,
+    load_holdings_from_server,
+    save_holdings_to_server,
+    get_holdings_status,
+    get_market_cap_krw,
 )
 
 st.set_page_config(page_title=SYSTEM_NAME, page_icon="🏦", layout="wide")
 
-# ── 앱 시작 시 서버 RMS 파일 자동 로드 ──────────────────────
+# ── 앱 시작 시 서버 파일 자동 로드 ──────────────────────────
 if 'rms_df' not in st.session_state:
     df_server, meta_server = load_rms_from_server()
     st.session_state['rms_df']          = df_server
@@ -32,6 +36,11 @@ if 'rms_df' not in st.session_state:
     st.session_state['rms_total']       = meta_server['total']       if meta_server else 0
     st.session_state['rms_normal']      = meta_server['normal']      if meta_server else 0
     st.session_state['rms_restricted']  = meta_server['restricted']  if meta_server else 0
+
+if 'holdings_df' not in st.session_state:
+    df_holdings, meta_holdings = load_holdings_from_server()
+    st.session_state['holdings_df']   = df_holdings
+    st.session_state['holdings_meta'] = meta_holdings
 
 
 # ── RMS 상태 표시 헬퍼 ───────────────────────────────────────
@@ -61,6 +70,40 @@ def render_rms_result(ticker: str, screen_eligible: bool):
         st.error(f"🟢 {rms_status_text}\n\n🚨 불일치 — RMS 매수금지 재설정 검토 필요")
     else:
         st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요")
+
+
+# ── 보유현황 표시 헬퍼 ───────────────────────────────────────
+def render_holdings(ticker: str, is_korean: bool, data: dict, eligible: bool):
+    df_holdings = st.session_state.get('holdings_df')
+    if df_holdings is None:
+        return
+
+    market_cap_krw = get_market_cap_krw(is_korean, data)
+    holdings       = get_holdings_status(ticker, df_holdings, market_cap_krw, eligible)
+
+    if not holdings['found']:
+        return
+
+    quantity = holdings['quantity']
+    amount   = holdings['amount']
+    accounts = holdings['accounts']
+    level    = holdings['warning_level']
+    msg      = holdings['warning_msg']
+
+    amount_str = f"{amount/100000000:.2f}억원" if amount >= 100000000 else f"{amount:,.0f}원"
+
+    content = (
+        f"**📦 당사 보유현황**\n\n"
+        f"계좌수: {accounts}개 | 보유수량: {quantity:,}주 | 보유금액: {amount_str}"
+        f"\n\n{msg}"
+    )
+
+    if level == 'danger':
+        st.error(content)
+    elif level == 'caution':
+        st.warning(content)
+    else:
+        st.success(content)
 
 
 # ── 국내주식 DART 재무 요약 표시 ─────────────────────────────
@@ -198,9 +241,8 @@ with st.sidebar:
     st.caption(f"KB증권 하이브리드 | v{VERSION}")
     st.markdown("---")
 
-    # ── RMS 파일 상태 표시 ────────────────────────────────────
+    # ── RMS 파일 상태 ─────────────────────────────────────────
     st.header("📂 RMS 파일")
-
     if st.session_state['rms_uploaded_at']:
         st.success(
             f"✅ 기준일: {st.session_state['rms_uploaded_at']}\n\n"
@@ -210,19 +252,17 @@ with st.sidebar:
             f"| 제한 {st.session_state['rms_restricted']}"
         )
     else:
-        st.warning("⚠️ RMS 파일 없음 (GitHub data 폴더 확인 필요)")
+        st.warning("⚠️ RMS 파일 없음")
 
-    # 긴급 업로드 버튼 (선택적 사용)
-    with st.expander("🔄 긴급 업로드 (수동)"):
-        st.caption("매일 GitHub에 파일을 올리는 방식이 기본입니다.\n긴급 시에만 사용하세요.")
-        uploaded = st.file_uploader(
-            "RMS 파일 업로드",
-            type=['xlsx'],
+    with st.expander("🔄 RMS 긴급 업로드"):
+        st.caption("매일 GitHub 업로드가 기본입니다.\n긴급 시에만 사용하세요.")
+        rms_uploaded = st.file_uploader(
+            "RMS 파일", type=['xlsx'], key="rms_uploader",
             label_visibility="collapsed"
         )
-        if uploaded and uploaded.name != st.session_state.get('rms_filename'):
+        if rms_uploaded and rms_uploaded.name != st.session_state.get('rms_filename'):
             try:
-                meta_new = save_rms_to_server(uploaded, uploaded.name)
+                meta_new = save_rms_to_server(rms_uploaded, rms_uploaded.name)
                 df_new, _ = load_rms_from_server()
                 st.session_state['rms_df']          = df_new
                 st.session_state['rms_filename']    = meta_new['filename']
@@ -230,6 +270,37 @@ with st.sidebar:
                 st.session_state['rms_total']       = meta_new['total']
                 st.session_state['rms_normal']      = meta_new['normal']
                 st.session_state['rms_restricted']  = meta_new['restricted']
+                st.success("✅ 업로드 완료")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ 업로드 실패: {e}")
+
+    st.markdown("---")
+
+    # ── 보유수량 파일 상태 ────────────────────────────────────
+    st.header("📦 보유수량 파일")
+    meta_h = st.session_state.get('holdings_meta')
+    if meta_h:
+        st.success(
+            f"✅ 기준월: {meta_h.get('base_date', 'N/A')}\n\n"
+            f"📄 {meta_h.get('filename', '')}\n\n"
+            f"전체 {meta_h.get('total', 0)}개 종목"
+        )
+    else:
+        st.warning("⚠️ 보유수량 파일 없음")
+
+    with st.expander("🔄 보유수량 업로드"):
+        st.caption("월별 1회 GitHub 업로드가 기본입니다.\n긴급 시에만 사용하세요.")
+        h_uploaded = st.file_uploader(
+            "보유수량 파일", type=['xlsx'], key="holdings_uploader",
+            label_visibility="collapsed"
+        )
+        if h_uploaded:
+            try:
+                meta_new = save_holdings_to_server(h_uploaded, h_uploaded.name)
+                df_new, _ = load_holdings_from_server()
+                st.session_state['holdings_df']   = df_new
+                st.session_state['holdings_meta'] = meta_new
                 st.success("✅ 업로드 완료")
                 st.rerun()
             except Exception as e:
@@ -343,6 +414,7 @@ if search_button and ticker:
 
                 st.markdown("---")
 
+                # 판정 + RMS 상태
                 col_j, col_r = st.columns(2)
                 with col_j:
                     if analysis['eligible']:
@@ -352,6 +424,10 @@ if search_button and ticker:
                 with col_r:
                     render_rms_result(ticker, analysis['eligible'])
 
+                # 보유현황
+                render_holdings(ticker, True, data, analysis['eligible'])
+
+                # 종목 정보 박스
                 sector_text = f" · {data.get('sector', '')}" if data.get('sector') != 'N/A' else ""
                 ratio_text  = (
                     f"\n💰 담보인정비율 {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})"
@@ -426,6 +502,7 @@ if search_button and ticker:
 
                 st.markdown("---")
 
+                # 판정 + RMS 상태
                 col_j, col_r = st.columns(2)
                 with col_j:
                     if analysis['eligible']:
@@ -435,6 +512,10 @@ if search_button and ticker:
                 with col_r:
                     render_rms_result(ticker.upper(), analysis['eligible'])
 
+                # 보유현황
+                render_holdings(ticker.upper(), False, data, analysis['eligible'])
+
+                # 종목 정보 박스
                 sector_text = ""
                 if data.get('sector') != 'N/A':
                     sector_text += f" · {data['sector']}"
