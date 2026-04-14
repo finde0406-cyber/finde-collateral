@@ -103,16 +103,18 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-    if uploaded:
+    if uploaded and uploaded.name != st.session_state.get('rms_filename'):
         try:
             df_rms = parse_rms_excel(uploaded)
+            from datetime import timezone, timedelta
+            kst = timezone(timedelta(hours=9))
+            now_kst = datetime.now(kst).strftime('%Y-%m-%d %H:%M')
             st.session_state['rms_df']          = df_rms
             st.session_state['rms_filename']    = uploaded.name
-            st.session_state['rms_uploaded_at'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+            st.session_state['rms_uploaded_at'] = now_kst
             st.session_state['rms_total']       = len(df_rms)
             st.session_state['rms_normal']      = int((df_rms['RMS상태'] == '정상').sum())
             st.session_state['rms_restricted']  = int((df_rms['RMS상태'] != '정상').sum())
-            st.rerun()
         except Exception as e:
             st.error(f"❌ 업로드 실패: {e}")
 
