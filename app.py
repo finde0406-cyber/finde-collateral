@@ -14,20 +14,24 @@ from modules import (
     validate_us_stock_data,
     save_screening_log,
     parse_rms_excel,
+    load_rms_from_server,
+    save_rms_to_server,
     get_rms_status,
     get_dart_analysis,
 )
 
 st.set_page_config(page_title=SYSTEM_NAME, page_icon="🏦", layout="wide")
 
-# ── session_state 초기화 ─────────────────────────────────────
+# ── 앱 시작 시 서버 RMS 파일 자동 로드 ──────────────────────
 if 'rms_df' not in st.session_state:
-    st.session_state['rms_df']          = None
-    st.session_state['rms_filename']    = None
-    st.session_state['rms_uploaded_at'] = None
-    st.session_state['rms_total']       = 0
-    st.session_state['rms_normal']      = 0
-    st.session_state['rms_restricted']  = 0
+    df_server, meta_server = load_rms_from_server()
+    st.session_state['rms_df']          = df_server
+    st.session_state['rms_meta']        = meta_server
+    st.session_state['rms_filename']    = meta_server['filename']    if meta_server else None
+    st.session_state['rms_uploaded_at'] = meta_server['uploaded_at'] if meta_server else None
+    st.session_state['rms_total']       = meta_server['total']       if meta_server else 0
+    st.session_state['rms_normal']      = meta_server['normal']      if meta_server else 0
+    st.session_state['rms_restricted']  = meta_server['restricted']  if meta_server else 0
 
 
 # ── RMS 상태 표시 헬퍼 ───────────────────────────────────────
@@ -69,7 +73,6 @@ def render_dart_summary(dart_summary: dict):
 
     col1, col2, col3, col4 = st.columns(4)
 
-    # 자본잠식률
     erosion = dart_summary.get('erosion_rate')
     if erosion is not None:
         if erosion >= 50:
@@ -83,7 +86,6 @@ def render_dart_summary(dart_summary: dict):
     else:
         col1.metric("자본잠식률", "N/A")
 
-    # 부채비율
     debt_ratio = dart_summary.get('debt_ratio')
     if debt_ratio is not None:
         if debt_ratio >= 300:
@@ -95,7 +97,6 @@ def render_dart_summary(dart_summary: dict):
     else:
         col2.metric("부채비율", "N/A")
 
-    # 감사의견
     opinion    = dart_summary.get('audit_opinion', 'N/A')
     audit_year = dart_summary.get('audit_year', '')
     if opinion in ['부적정', '의견거절']:
@@ -107,7 +108,6 @@ def render_dart_summary(dart_summary: dict):
     else:
         col3.metric("감사의견", opinion or "N/A")
 
-    # 연속 영업손실
     loss_years = dart_summary.get('loss_years', [])
     if len(loss_years) >= 3:
         col4.metric("연속 영업손실", f"{len(loss_years)}년", delta="위험", delta_color="inverse")
@@ -118,7 +118,6 @@ def render_dart_summary(dart_summary: dict):
     else:
         col4.metric("연속 영업손실", "없음", delta="정상", delta_color="normal")
 
-    # 위험 공시
     risk_discs = dart_summary.get('risk_disclosures', [])
     if risk_discs:
         st.markdown("**⚠️ 최근 위험 공시**")
@@ -126,7 +125,6 @@ def render_dart_summary(dart_summary: dict):
             d = disc['date']
             st.markdown(f"• {d[:4]}.{d[4:6]}.{d[6:]} — {disc['title']}")
 
-    # 매출 변동
     rev_change = dart_summary.get('revenue_change')
     if rev_change is not None and rev_change <= -30:
         st.warning(f"⚠️ 매출 변동: {rev_change:.1f}% ({year}년 기준)")
@@ -143,7 +141,6 @@ def render_us_financial_summary(financial_summary: dict, quote_type: str):
 
     col1, col2, col3, col4 = st.columns(4)
 
-    # 부채비율
     d2e = financial_summary.get('debt_to_equity')
     if d2e is not None:
         if d2e >= 300:
@@ -155,7 +152,6 @@ def render_us_financial_summary(financial_summary: dict, quote_type: str):
     else:
         col1.metric("부채비율", "N/A")
 
-    # ROE
     roe = financial_summary.get('roe')
     if roe is not None:
         if roe < -20:
@@ -167,7 +163,6 @@ def render_us_financial_summary(financial_summary: dict, quote_type: str):
     else:
         col2.metric("ROE", "N/A")
 
-    # 영업이익률
     op_margin = financial_summary.get('operating_margins')
     if op_margin is not None:
         if op_margin < -20:
@@ -179,7 +174,6 @@ def render_us_financial_summary(financial_summary: dict, quote_type: str):
     else:
         col3.metric("영업이익률", "N/A")
 
-    # 유동비율
     current_ratio = financial_summary.get('current_ratio')
     if current_ratio is not None:
         if current_ratio < 1.0:
@@ -189,7 +183,6 @@ def render_us_financial_summary(financial_summary: dict, quote_type: str):
     else:
         col4.metric("유동비율", "N/A")
 
-    # 매출 성장률
     rev_growth = financial_summary.get('revenue_growth')
     if rev_growth is not None and rev_growth <= -30:
         st.warning(f"⚠️ 매출 성장률 {rev_growth:.1f}% — 급감")
@@ -205,40 +198,42 @@ with st.sidebar:
     st.caption(f"KB증권 하이브리드 | v{VERSION}")
     st.markdown("---")
 
+    # ── RMS 파일 상태 표시 ────────────────────────────────────
     st.header("📂 RMS 파일")
 
     if st.session_state['rms_uploaded_at']:
         st.success(
-            f"✅ 업로드: {st.session_state['rms_uploaded_at']}\n\n"
+            f"✅ 기준일: {st.session_state['rms_uploaded_at']}\n\n"
             f"📄 {st.session_state['rms_filename']}\n\n"
             f"전체 {st.session_state['rms_total']}개 "
             f"| 정상 {st.session_state['rms_normal']} "
             f"| 제한 {st.session_state['rms_restricted']}"
         )
     else:
-        st.warning("⚠️ RMS 파일 미업로드")
+        st.warning("⚠️ RMS 파일 없음 (GitHub data 폴더 확인 필요)")
 
-    uploaded = st.file_uploader(
-        "RMS일별종목관리현황_YYYYMMDD.xlsx",
-        type=['xlsx'],
-        label_visibility="collapsed"
-    )
-
-    if uploaded and uploaded.name != st.session_state.get('rms_filename'):
-        try:
-            df_rms = parse_rms_excel(uploaded)
-            from datetime import timezone, timedelta
-            kst     = timezone(timedelta(hours=9))
-            now_kst = datetime.now(kst).strftime('%Y-%m-%d %H:%M')
-            st.session_state['rms_df']          = df_rms
-            st.session_state['rms_filename']    = uploaded.name
-            st.session_state['rms_uploaded_at'] = now_kst
-            st.session_state['rms_total']       = len(df_rms)
-            st.session_state['rms_normal']      = int((df_rms['RMS상태'] == '정상').sum())
-            st.session_state['rms_restricted']  = int((df_rms['RMS상태'] != '정상').sum())
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ 업로드 실패: {e}")
+    # 긴급 업로드 버튼 (선택적 사용)
+    with st.expander("🔄 긴급 업로드 (수동)"):
+        st.caption("매일 GitHub에 파일을 올리는 방식이 기본입니다.\n긴급 시에만 사용하세요.")
+        uploaded = st.file_uploader(
+            "RMS 파일 업로드",
+            type=['xlsx'],
+            label_visibility="collapsed"
+        )
+        if uploaded and uploaded.name != st.session_state.get('rms_filename'):
+            try:
+                meta_new = save_rms_to_server(uploaded, uploaded.name)
+                df_new, _ = load_rms_from_server()
+                st.session_state['rms_df']          = df_new
+                st.session_state['rms_filename']    = meta_new['filename']
+                st.session_state['rms_uploaded_at'] = meta_new['uploaded_at']
+                st.session_state['rms_total']       = meta_new['total']
+                st.session_state['rms_normal']      = meta_new['normal']
+                st.session_state['rms_restricted']  = meta_new['restricted']
+                st.success("✅ 업로드 완료")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ 업로드 실패: {e}")
 
     st.markdown("---")
 
@@ -268,7 +263,6 @@ with st.sidebar:
 
     with st.expander("📊 국내주식 등급"):
         st.markdown("""
-        **시총 순위 기준 (근사치)**:
         - 초대형주: 10조+
         - 대형주: 5조~10조
         - 중형주: 5천억~5조
@@ -282,7 +276,6 @@ with st.sidebar:
 
     with st.expander("📊 담보인정비율"):
         st.markdown("""
-        **변동성 기준**:
         - 400%+: 0%
         - 350~400%: 30%
         - 300~350%: 50%
@@ -445,14 +438,14 @@ if search_button and ticker:
                 sector_text = ""
                 if data.get('sector') != 'N/A':
                     sector_text += f" · {data['sector']}"
-                if data.get('industry') != 'N/A':
+                if data.get('industry') != 'N/A' and data.get('industry') != data.get('sector'):
                     sector_text += f" · {data['industry']}"
 
-                ratio_text = (
+                mcap_display = f"${data['mcap']:.2f}B" if data['mcap'] > 0 else "조회불가"
+                ratio_text   = (
                     f"\n💰 담보인정비율 {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})"
                     if analysis['acceptance_ratio'] < 100 else ""
                 )
-                mcap_display = f"${data['mcap']:.2f}B" if data['mcap'] > 0 else "조회불가"
                 st.info(
                     f"**{data['name']} ({ticker.upper()})** | {data['exchange']} · {analysis.get('cap_category', 'N/A')}{sector_text}  \n"
                     f"{data['mcap_label']} {mcap_display} | 현재가 ${data['price']:.2f} | 변동성 {analysis['volatility']:.1f}%  \n"
@@ -461,7 +454,6 @@ if search_button and ticker:
 
                 st.markdown("---")
 
-                # 해외주식 재무 요약
                 if analysis.get('financial_summary'):
                     render_us_financial_summary(
                         analysis['financial_summary'],
