@@ -5,8 +5,8 @@
 VERSION = "8.0"
 SYSTEM_NAME = "핀드 담보 심사 시스템"
 
-# DART API (발급 후 입력)
-DART_API_KEY = None
+# DART API
+DART_API_KEY = 2a943c8700adfcb64e1e1500318e480ad2684bf5
 
 # 국내주식 기준
 KOREAN_STOCK = {
