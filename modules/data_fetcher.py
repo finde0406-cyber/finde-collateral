@@ -18,7 +18,16 @@ def get_finnhub_client():
         _finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
     return _finnhub_client
 
-
+def find_ticker_by_name(name: str):
+    """종목명으로 종목코드 검색"""
+    try:
+        df_krx = fdr.StockListing('KRX')
+        match  = df_krx[df_krx['Name'] == name.strip()]
+        if not match.empty:
+            return match.iloc[0]['Code']
+        return None
+    except Exception:
+        return None
 def fetch_korean_stock(ticker):
     """국내주식 데이터 수집"""
     try:
