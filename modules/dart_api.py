@@ -28,14 +28,19 @@ def is_available() -> bool:
 def fetch_corp_code(stock_code: str):
     """종목코드 → DART 고유번호 조회 (1시간 캐시)"""
     try:
+        # 종목코드 6자리 보장 (앞자리 0 유지)
+        code = str(stock_code).zfill(6)
         res  = requests.get(
             f"{BASE_URL}/company.json",
-            params={'crtfc_key': DART_API_KEY, 'stock_code': stock_code},
+            params={'crtfc_key': DART_API_KEY, 'stock_code': code},
             timeout=5
         )
         data = res.json()
         if data.get('status') == '000':
             return data.get('corp_code')
+        # 상태 코드 확인용 (디버그 후 제거)
+        import streamlit as st
+        st.write(f"DART 응답: {data}")
         return None
     except Exception:
         return None
