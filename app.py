@@ -369,37 +369,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ── 보유수량 파일 상태 ────────────────────────────────────
-    st.header("📦 보유수량 파일")
-    meta_h = st.session_state.get('holdings_meta')
-    if meta_h:
-        st.success(
-            f"✅ 기준월: {meta_h.get('base_date', 'N/A')}\n\n"
-            f"📄 {meta_h.get('filename', '')}\n\n"
-            f"전체 {meta_h.get('total', 0)}개 종목"
-        )
-    else:
-        st.warning("⚠️ 보유수량 파일 없음")
-
-    with st.expander("🔄 보유수량 업로드"):
-        st.caption("월별 1회 GitHub 업로드가 기본입니다.\n긴급 시에만 사용하세요.")
-        h_uploaded = st.file_uploader(
-            "보유수량 파일", type=['xlsx'], key="holdings_uploader",
-            label_visibility="collapsed"
-        )
-        if h_uploaded:
-            try:
-                meta_new = save_holdings_to_server(h_uploaded, h_uploaded.name)
-                df_new, _ = load_holdings_from_server()
-                st.session_state['holdings_df']   = df_new
-                st.session_state['holdings_meta'] = meta_new
-                st.success("✅ 업로드 완료")
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ 업로드 실패: {e}")
-
-    st.markdown("---")
-
 # ═══════════════════════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════════════════════
