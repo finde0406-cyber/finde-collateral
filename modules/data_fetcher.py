@@ -146,7 +146,16 @@ def fetch_us_stock(ticker):
             operating_margins = metrics.get('operatingMarginAnnual')
             revenue_growth    = metrics.get('revenueGrowthAnnual') or metrics.get('revenueGrowth3Y')
             beta              = metrics.get('beta')
-            market_cap_m      = metrics.get('marketCapitalization')  # $M 단위
+            market_cap_m = metrics.get('marketCapitalization')  # $M 단위
+
+            # ETF는 AUM 별도 조회
+            if quote_type == 'ETF' and not market_cap_m:
+                try:
+                    etf_profile = client.etf_profile(symbol)
+                    if etf_profile and etf_profile.get('aum'):
+                        market_cap_m = etf_profile['aum'] / 1000000  # $ → $M
+                except Exception:
+                    pass
             volume_m          = metrics.get('10DayAverageTradingVolume')  # M 단위
 
         except Exception:
