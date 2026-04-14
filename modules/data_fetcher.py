@@ -94,10 +94,23 @@ ETF_KEYWORDS = [
 ]
 
 
+# 알려진 ETF/ETP 티커 목록 (레버리지 포함)
+KNOWN_ETF_TICKERS = {
+    'SOXL', 'SOXS', 'TQQQ', 'SQQQ', 'UPRO', 'SPXU', 'UVXY', 'SVXY',
+    'TNA', 'TZA', 'LABU', 'LABD', 'FNGU', 'FNGD', 'TECL', 'TECS',
+    'UDOW', 'SDOW', 'NUGT', 'DUST', 'JNUG', 'JDST', 'FAS', 'FAZ',
+    'SPY', 'QQQ', 'IWM', 'DIA', 'GLD', 'SLV', 'USO', 'TLT', 'HYG',
+    'XLF', 'XLK', 'XLE', 'XLV', 'XLI', 'XLP', 'XLU', 'XLB', 'XLRE',
+    'VTI', 'VOO', 'VEA', 'VWO', 'BND', 'AGG', 'LQD',
+}
+
 def _is_etf(symbol: str, industry: str) -> bool:
     """ETF 여부 판별"""
     s = symbol.upper()
     i = industry.upper() if industry else ''
+    # 알려진 ETF 티커 직접 체크
+    if s in KNOWN_ETF_TICKERS:
+        return True
     return any(kw in s or kw in i for kw in ETF_KEYWORDS)
 
 
