@@ -354,8 +354,9 @@ def analyze_us_stock(data):
 
     min_mcap = US_STOCK['min_market_cap']
     if quote_type == "ETF":
-        if mcap < 0.1:
-            violations.append("❌ 소규모 ETF")
+        # ETF는 AUM 조회 실패 시 시총 기준 심사 제외
+        if mcap > 0 and mcap < 0.1:
+            violations.append("❌ 소규모 ETF (AUM $0.1B 미만)")
     else:
         if mcap > 0 and mcap < min_mcap:
             violations.append(f"❌ 소형주 (${mcap:.2f}B)")
@@ -371,7 +372,18 @@ def analyze_us_stock(data):
 
     limits = US_STOCK['volatility_limits']
 
-    if mcap >= 50:
+    if quote_type == 'ETF':
+        # ETF는 시총 미조회 시 대형으로 기본 처리
+        if mcap >= 10:
+            cap_category     = "대형 ETF"
+            volatility_limit = limits['large']
+        elif mcap > 0:
+            cap_category     = "중형 ETF"
+            volatility_limit = limits['mid']
+        else:
+            cap_category     = "ETF"
+            volatility_limit = limits['large']  # AUM 미확인 시 대형 기준 적용
+    elif mcap >= 50:
         cap_category     = "초대형주"
         volatility_limit = limits['mega']
     elif mcap >= 10:
