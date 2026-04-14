@@ -243,7 +243,7 @@ with st.sidebar:
     st.markdown("---")
 
     st.header("📖 가이드")
-    st.markdown("**국내**: `005930`  \n**해외**: `AAPL`")
+    st.markdown("**국내**: `005930`. '삼성전자'  \n**해외**: `AAPL`")
     st.markdown("---")
 
     with st.expander("🔴 국내주식 불가 기준"):
