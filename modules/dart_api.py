@@ -1,13 +1,11 @@
 """
 DART API 연동
-- 재무제표 (최근 2년으로 단축 - 속도 개선)
+- 재무제표 (최근 2년)
 - 감사의견
 - 위험 공시 탐지
-- st.cache_data로 캐싱 (같은 종목 재조회 시 즉시 반환)
 """
 import requests
-import streamlit as st
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from config import DART_API_KEY
 
@@ -25,9 +23,8 @@ def is_available() -> bool:
 
 
 def fetch_corp_code(stock_code: str):
-    """종목코드 → DART 고유번호 조회 (1시간 캐시)"""
+    """종목코드 → DART 고유번호 조회"""
     try:
-        # 종목코드 6자리 보장 (앞자리 0 유지)
         code = str(stock_code).zfill(6)
         res  = requests.get(
             f"{BASE_URL}/company.json",
@@ -37,17 +34,13 @@ def fetch_corp_code(stock_code: str):
         data = res.json()
         if data.get('status') == '000':
             return data.get('corp_code')
-        # 상태 코드 확인용 (디버그 후 제거)
-        import streamlit as st
-        st.write(f"DART 응답: {data}")
-        print(f"DART corp_code 응답: status={data.get('status')}, message={data.get('message')}, code={code}")
         return None
     except Exception:
         return None
 
 
 def fetch_financial_year(corp_code: str, year: int):
-    """특정 연도 재무데이터 조회 (1시간 캐시)"""
+    """특정 연도 재무데이터 조회"""
     for fs_div in ['CFS', 'OFS']:
         try:
             res  = requests.get(
@@ -94,15 +87,14 @@ def fetch_financial_year(corp_code: str, year: int):
 
 
 def fetch_financial_data(corp_code: str) -> list:
-    """최근 2년 재무데이터 병렬 조회 (1시간 캐시)"""
+    """최근 2년 재무데이터 병렬 조회"""
     current_year = datetime.now().year
     years        = [current_year - 1, current_year - 2]
 
     results = []
-    # 병렬 조회로 속도 개선
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {executor.submit(fetch_financial_year, corp_code, y): y for y in years}
-        for future in as_completed(futures):
+        for future in futures:
             result = future.result()
             if result:
                 results.append(result)
@@ -111,16 +103,16 @@ def fetch_financial_data(corp_code: str) -> list:
 
 
 def fetch_audit_opinion(corp_code: str) -> dict:
-    """최근 감사의견 조회 (1시간 캐시)"""
+    """최근 감사의견 조회"""
     try:
         res  = requests.get(
             f"{BASE_URL}/list.json",
             params={
-                'crtfc_key'          : DART_API_KEY,
-                'corp_code'          : corp_code,
-                'pblntf_ty'          : 'A',
-                'pblntf_detail_ty'   : 'A001',
-                'page_count'         : 3,
+                'crtfc_key'        : DART_API_KEY,
+                'corp_code'        : corp_code,
+                'pblntf_ty'        : 'A',
+                'pblntf_detail_ty' : 'A001',
+                'page_count'       : 3,
             },
             timeout=5
         )
@@ -140,9 +132,8 @@ def fetch_audit_opinion(corp_code: str) -> dict:
         data2 = res2.json()
 
         if data2.get('status') == '000' and data2.get('list'):
-            opinion_data = data2['list'][0]
             return {
-                'opinion': opinion_data.get('opinion', ''),
+                'opinion': data2['list'][0].get('opinion', ''),
                 'year'   : latest.get('rcept_dt', '')[:4]
             }
         return {'opinion': None, 'year': None}
@@ -151,7 +142,7 @@ def fetch_audit_opinion(corp_code: str) -> dict:
 
 
 def fetch_risk_disclosures(corp_code: str) -> list:
-    """최근 1년 위험 공시 탐지 (1시간 캐시)"""
+    """최근 1년 위험 공시 탐지"""
     try:
         today  = datetime.now()
         bgn_de = f"{today.year - 1}{today.month:02d}{today.day:02d}"
@@ -183,10 +174,7 @@ def fetch_risk_disclosures(corp_code: str) -> list:
 
 
 def get_dart_analysis(stock_code: str) -> dict:
-    """
-    메인 함수 — DART 전체 분석 (1시간 캐시)
-    재무/감사/공시 병렬 조회로 속도 개선
-    """
+    """메인 함수 — DART 전체 분석"""
     if not is_available():
         return {'available': False, 'error': 'API Key 미설정'}
 
@@ -201,7 +189,6 @@ def get_dart_analysis(stock_code: str) -> dict:
             'risk_disclosures': []
         }
 
-    # 재무/감사/공시 병렬 조회
     with ThreadPoolExecutor(max_workers=3) as executor:
         f_financial = executor.submit(fetch_financial_data, corp_code)
         f_audit     = executor.submit(fetch_audit_opinion, corp_code)
