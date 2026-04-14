@@ -115,8 +115,9 @@ with st.sidebar:
             st.session_state['rms_total']       = len(df_rms)
             st.session_state['rms_normal']      = int((df_rms['RMS상태'] == '정상').sum())
             st.session_state['rms_restricted']  = int((df_rms['RMS상태'] != '정상').sum())
+            st.write("=== 디버그: 한국 종목 샘플 ===")
             st.write(df_rms[df_rms['국가'] == '한국'].head(5))
-            st.rerun()
+            # st.rerun()  ← 임시 주석처리
         except Exception as e:
             st.error(f"❌ 업로드 실패: {e}")
 
