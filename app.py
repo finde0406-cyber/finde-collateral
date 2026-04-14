@@ -340,6 +340,8 @@ if search_button and ticker:
                     st.stop()
 
                 dart_data = get_dart_analysis(ticker)
+                st.write("=== DART 디버그 ===")
+                st.write(dart_data)
                 analysis  = analyze_korean_stock(data, dart_data)
 
                 save_screening_log(
