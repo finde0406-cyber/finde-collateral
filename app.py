@@ -115,6 +115,7 @@ with st.sidebar:
             st.session_state['rms_total']       = len(df_rms)
             st.session_state['rms_normal']      = int((df_rms['RMS상태'] == '정상').sum())
             st.session_state['rms_restricted']  = int((df_rms['RMS상태'] != '정상').sum())
+            st.rerun()
         except Exception as e:
             st.error(f"❌ 업로드 실패: {e}")
 
