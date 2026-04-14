@@ -8,6 +8,7 @@ from config import VERSION, SYSTEM_NAME
 from modules import (
     fetch_korean_stock,
     fetch_us_stock,
+    find_ticker_by_name,
     analyze_korean_stock,
     analyze_us_stock,
     validate_korean_stock_data,
@@ -391,6 +392,18 @@ with st.form(key='search_form', clear_on_submit=False):
         )
 
 if search_button and ticker:
+    ticker = ticker.strip()
+
+    # 한글 종목명으로 입력한 경우 코드로 변환
+    if any('\uAC00' <= c <= '\uD7A3' for c in ticker):
+        found_ticker = find_ticker_by_name(ticker)
+        if found_ticker:
+            ticker    = found_ticker
+            is_korean = True
+        else:
+            st.error(f"❌ '{ticker}' 종목을 찾을 수 없습니다. 종목코드로 검색해주세요.")
+            st.stop()
+
     is_korean = ticker.isdigit() and len(ticker) == 6
 
     if is_korean:
