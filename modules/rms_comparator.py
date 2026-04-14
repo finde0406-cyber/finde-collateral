@@ -69,7 +69,15 @@ def get_rms_status(ticker: str, df_rms: pd.DataFrame) -> dict:
     if df_rms is None or df_rms.empty:
         return {'found': False, 'status': '', 'raw': ''}
 
-    match = df_rms[df_rms['종목코드'].str.upper() == ticker.strip().upper()]
+    ticker_clean = ticker.strip().upper()
+    # 6자리 숫자면 한국 종목 — A 붙인 원본코드로도 조회
+    if ticker_clean.isdigit() and len(ticker_clean) == 6:
+        match = df_rms[
+            (df_rms['종목코드'].str.upper() == ticker_clean) |
+            (df_rms['종목코드_원본'].str.upper() == 'A' + ticker_clean)
+        ]
+    else:
+        match = df_rms[df_rms['종목코드'].str.upper() == ticker_clean]
 
     if match.empty:
         return {'found': False, 'status': '', 'raw': ''}
