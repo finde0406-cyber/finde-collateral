@@ -7,19 +7,7 @@ RMS 일별 종목관리현황 모듈
 - 홍콩: 5자리 숫자
 - 미국: 영문 티커
 """
-import json
-import os
 import pandas as pd
-from datetime import datetime
-
-# 저장 경로
-DATA_DIR  = "data"
-RMS_FILE  = os.path.join(DATA_DIR, "rms_latest.xlsx")
-META_FILE = os.path.join(DATA_DIR, "rms_meta.json")
-
-
-def _ensure_data_dir():
-    os.makedirs(DATA_DIR, exist_ok=True)
 
 
 def detect_country(code: str) -> str:
@@ -61,7 +49,7 @@ def parse_rms_excel(file) -> pd.DataFrame:
     # 빈 종목코드 제거
     df = df[df['종목코드_원본'] != ''].reset_index(drop=True)
 
-    df['국가']    = df['종목코드_원본'].apply(detect_country)
+    df['국가']     = df['종목코드_원본'].apply(detect_country)
     df['종목코드'] = df.apply(
         lambda r: get_clean_code(r['종목코드_원본'], r['국가']), axis=1
     )
@@ -70,49 +58,6 @@ def parse_rms_excel(file) -> pd.DataFrame:
     )
 
     return df[['종목코드_원본', '종목코드', '국가', 'RMS상태', 'RMS상태원문']]
-
-
-def save_rms_data(uploaded_file, original_filename: str) -> dict:
-    """
-    RMS 파일 서버 저장
-    반환: meta 딕셔너리
-    """
-    _ensure_data_dir()
-
-    df = parse_rms_excel(uploaded_file)
-
-    # 파싱된 데이터 저장
-    df.to_excel(RMS_FILE, index=False)
-
-    # 메타 저장
-    meta = {
-        'filename'    : original_filename,
-        'uploaded_at' : datetime.now().strftime('%Y-%m-%d %H:%M'),
-        'total'       : len(df),
-        'normal'      : int((df['RMS상태'] == '정상').sum()),
-        'restricted'  : int((df['RMS상태'] != '정상').sum()),
-    }
-    with open(META_FILE, 'w', encoding='utf-8') as f:
-        json.dump(meta, f, ensure_ascii=False)
-
-    return meta
-
-
-def load_rms_data() -> tuple:
-    """
-    저장된 RMS 데이터 로드
-    반환: (DataFrame or None, meta dict or None)
-    """
-    if not os.path.exists(RMS_FILE) or not os.path.exists(META_FILE):
-        return None, None
-
-    try:
-        df = pd.read_excel(RMS_FILE, dtype=str).fillna("")
-        with open(META_FILE, 'r', encoding='utf-8') as f:
-            meta = json.load(f)
-        return df, meta
-    except Exception:
-        return None, None
 
 
 def get_rms_status(ticker: str, df_rms: pd.DataFrame) -> dict:
