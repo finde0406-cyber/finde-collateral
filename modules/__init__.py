@@ -15,6 +15,13 @@ from .rms_comparator import (
     get_rms_status
 )
 from .dart_api import get_dart_analysis
+from .holdings_manager import (
+    parse_holdings_excel,
+    load_holdings_from_server,
+    save_holdings_to_server,
+    get_holdings_status,
+    get_market_cap_krw,
+)
 
 __all__ = [
     'fetch_korean_stock',
@@ -29,4 +36,9 @@ __all__ = [
     'save_rms_to_server',
     'get_rms_status',
     'get_dart_analysis',
+    'parse_holdings_excel',
+    'load_holdings_from_server',
+    'save_holdings_to_server',
+    'get_holdings_status',
+    'get_market_cap_krw',
 ]
