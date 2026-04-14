@@ -16,6 +16,7 @@ from modules import (
     export_to_excel,
     parse_rms_excel,
     get_rms_status,
+    get_dart_analysis,
 )
 
 st.set_page_config(page_title=SYSTEM_NAME, page_icon="🏦", layout="wide")
@@ -32,7 +33,6 @@ if 'rms_df' not in st.session_state:
 
 # ── RMS 상태 표시 헬퍼 ───────────────────────────────────────
 def render_rms_result(ticker: str, screen_eligible: bool):
-    """심사 결과 옆 RMS 상태 + 일치여부 표시. 미업로드 시 표시 안 함."""
     df_rms = st.session_state.get('rms_df')
     if df_rms is None:
         return
@@ -51,13 +51,91 @@ def render_rms_result(ticker: str, screen_eligible: bool):
     )
 
     if screen_ok and rms_ok:
-        st.success(f"🟢 {rms_status_text}\n\n✅ RMS 일치 — 정상")
+        st.success(f"🟢 {rms_status_text}\n\n✅ RMS 일치 — 정상\n\n담보 설정 가능 종목입니다.")
     elif not screen_ok and not rms_ok:
-        st.error(f"🔴 {rms_status_text}\n\n✅ RMS 일치 — 협의 불가")
+        st.error(f"🔴 {rms_status_text}\n\n✅ RMS 일치 — 협의 불가\n\n담보 설정이 불가한 종목입니다.")
     elif not screen_ok and rms_ok:
-        st.error(f"🟢 {rms_status_text}\n\n🚨 불일치 — RMS 매수금지 재설정 검토 필요")
+        st.error(f"🟢 {rms_status_text}\n\n🚨 불일치 — RMS 매수금지 재설정 검토 필요\n\n담보 설정이 불가한 종목입니다.")
     else:
-        st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요")
+        st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요\n\n담보 설정 가능 종목입니다.")
+
+
+# ── DART 재무 요약 표시 헬퍼 ────────────────────────────────
+def render_dart_summary(dart_summary: dict):
+    """DART 재무 요약 박스 표시"""
+    if not dart_summary:
+        return
+
+    st.markdown("### 📊 DART 재무 분석")
+
+    year = dart_summary.get('latest_year', '')
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    # 자본잠식률
+    erosion = dart_summary.get('erosion_rate')
+    if erosion is not None:
+        if erosion >= 50:
+            col1.metric("자본잠식률", f"{erosion:.1f}%", delta="위험", delta_color="inverse")
+        elif erosion >= 30:
+            col1.metric("자본잠식률", f"{erosion:.1f}%", delta="주의", delta_color="inverse")
+        else:
+            col1.metric("자본잠식률", f"{erosion:.1f}%", delta="정상", delta_color="normal")
+    elif dart_summary.get('equity') is not None and dart_summary['equity'] <= 0:
+        col1.metric("자본잠식률", "완전잠식", delta="위험", delta_color="inverse")
+    else:
+        col1.metric("자본잠식률", "N/A")
+
+    # 부채비율
+    debt_ratio = dart_summary.get('debt_ratio')
+    if debt_ratio is not None:
+        if debt_ratio >= 300:
+            col2.metric("부채비율", f"{debt_ratio:.0f}%", delta="위험", delta_color="inverse")
+        elif debt_ratio >= 200:
+            col2.metric("부채비율", f"{debt_ratio:.0f}%", delta="주의", delta_color="inverse")
+        else:
+            col2.metric("부채비율", f"{debt_ratio:.0f}%", delta="정상", delta_color="normal")
+    else:
+        col2.metric("부채비율", "N/A")
+
+    # 감사의견
+    opinion = dart_summary.get('audit_opinion', 'N/A')
+    audit_year = dart_summary.get('audit_year', '')
+    if opinion in ['부적정', '의견거절']:
+        col3.metric("감사의견", opinion, delta="즉시불가", delta_color="inverse")
+    elif opinion == '한정':
+        col3.metric("감사의견", opinion, delta="주의", delta_color="inverse")
+    elif opinion == '적정':
+        col3.metric("감사의견", f"{opinion} ({audit_year})", delta="정상", delta_color="normal")
+    else:
+        col3.metric("감사의견", opinion or "N/A")
+
+    # 영업손실 연속
+    loss_years = dart_summary.get('loss_years', [])
+    if len(loss_years) >= 3:
+        col4.metric("연속 영업손실", f"{len(loss_years)}년", delta="위험", delta_color="inverse")
+    elif len(loss_years) == 2:
+        col4.metric("연속 영업손실", f"{len(loss_years)}년", delta="주의", delta_color="inverse")
+    elif len(loss_years) == 1:
+        col4.metric("연속 영업손실", f"{len(loss_years)}년", delta="모니터링", delta_color="inverse")
+    else:
+        col4.metric("연속 영업손실", "없음", delta="정상", delta_color="normal")
+
+    # 위험 공시
+    risk_discs = dart_summary.get('risk_disclosures', [])
+    if risk_discs:
+        st.markdown("**⚠️ 최근 위험 공시**")
+        for disc in risk_discs:
+            date_str = disc['date']
+            formatted = f"{date_str[:4]}.{date_str[4:6]}.{date_str[6:]}"
+            st.markdown(f"• {formatted} — {disc['title']}")
+
+    # 매출 변동
+    rev_change = dart_summary.get('revenue_change')
+    if rev_change is not None and rev_change <= -30:
+        st.warning(f"⚠️ 매출 변동: {rev_change:.1f}% ({year}년 기준)")
+
+    st.markdown("---")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -92,7 +170,7 @@ with st.sidebar:
         try:
             df_rms = parse_rms_excel(uploaded)
             from datetime import timezone, timedelta
-            kst = timezone(timedelta(hours=9))
+            kst     = timezone(timedelta(hours=9))
             now_kst = datetime.now(kst).strftime('%Y-%m-%d %H:%M')
             st.session_state['rms_df']          = df_rms
             st.session_state['rms_filename']    = uploaded.name
@@ -100,7 +178,7 @@ with st.sidebar:
             st.session_state['rms_total']       = len(df_rms)
             st.session_state['rms_normal']      = int((df_rms['RMS상태'] == '정상').sum())
             st.session_state['rms_restricted']  = int((df_rms['RMS상태'] != '정상').sum())
-            # st.rerun()  ← 임시 주석처리
+            st.rerun()
         except Exception as e:
             st.error(f"❌ 업로드 실패: {e}")
 
@@ -117,6 +195,9 @@ with st.sidebar:
         - 동전주 (1,000원 미만)
         - 시총 500억 미만
         - 변동성 극심
+        - 완전자본잠식
+        - 감사의견 부적정/의견거절
+        - 3년 연속 영업손실
         """)
 
     with st.expander("🔴 해외주식 불가 기준"):
@@ -205,7 +286,10 @@ if search_button and ticker:
                     st.info("💡 잠시 후 다시 시도하거나 관리자에게 문의하세요")
                     st.stop()
 
-                analysis = analyze_korean_stock(data)
+                # DART 분석 (국내주식만)
+                dart_data = get_dart_analysis(ticker)
+
+                analysis = analyze_korean_stock(data, dart_data)
 
                 save_screening_log(
                     ticker,
@@ -243,6 +327,11 @@ if search_button and ticker:
 
                 st.markdown("---")
 
+                # DART 재무 요약
+                if analysis.get('dart_summary'):
+                    render_dart_summary(analysis['dart_summary'])
+
+                # 불가 사유 및 리스크
                 if analysis['violations']:
                     col_v1, col_v2 = st.columns(2)
                     with col_v1:
