@@ -22,11 +22,32 @@ def detect_country(code: str) -> str:
     return '미국'
 
 
-def get_clean_code(code: str, country: str) -> str:
-    """심사용 코드 반환 - 한국은 A 제거"""
-    if country == '한국':
-        return code[1:]  # A000660 → 000660
-    return code
+def get_rms_status(ticker: str, df_rms: pd.DataFrame) -> dict:
+    if df_rms is None or df_rms.empty:
+        return {'found': False, 'status': '', 'raw': ''}
+
+    ticker_clean = ticker.strip().upper()
+
+    # 종목코드 열(A 제거된 코드)로 조회
+    match = df_rms[df_rms['종목코드'].str.strip().str.upper() == ticker_clean]
+
+    # 못 찾으면 종목코드_원본(A 포함)으로도 조회
+    if match.empty:
+        match = df_rms[df_rms['종목코드_원본'].str.strip().str.upper() == ticker_clean]
+
+    # 그래도 못 찾으면 A 붙여서 조회
+    if match.empty:
+        match = df_rms[df_rms['종목코드_원본'].str.strip().str.upper() == 'A' + ticker_clean]
+
+    if match.empty:
+        return {'found': False, 'status': '', 'raw': ''}
+
+    row = match.iloc[0]
+    return {
+        'found' : True,
+        'status': row['RMS상태'],
+        'raw'   : row['RMS상태원문']
+    }
 
 
 def parse_rms_excel(file) -> pd.DataFrame:
