@@ -24,7 +24,6 @@ def is_available() -> bool:
     return DART_API_KEY is not None and DART_API_KEY != ""
 
 
-@st.cache_data(ttl=3600)
 def fetch_corp_code(stock_code: str):
     """종목코드 → DART 고유번호 조회 (1시간 캐시)"""
     try:
@@ -41,6 +40,7 @@ def fetch_corp_code(stock_code: str):
         # 상태 코드 확인용 (디버그 후 제거)
         import streamlit as st
         st.write(f"DART 응답: {data}")
+        print(f"DART corp_code 응답: status={data.get('status')}, message={data.get('message')}, code={code}")
         return None
     except Exception:
         return None
