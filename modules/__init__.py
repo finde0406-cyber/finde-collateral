@@ -10,8 +10,7 @@ from .utils import (
     export_to_excel
 )
 from .rms_comparator import (
-    save_rms_data,
-    load_rms_data,
+    parse_rms_excel,
     get_rms_status
 )
 
@@ -24,7 +23,6 @@ __all__ = [
     'validate_us_stock_data',
     'save_screening_log',
     'export_to_excel',
-    'save_rms_data',
-    'load_rms_data',
+    'parse_rms_excel',
     'get_rms_status',
 ]
