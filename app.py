@@ -51,13 +51,13 @@ def render_rms_result(ticker: str, screen_eligible: bool):
     )
 
     if screen_ok and rms_ok:
-        st.success(f"🟢 {rms_status_text}\n\n✅ RMS 일치 — 정상")
+        st.success(f"🟢 {rms_status_text}\n\n✅ RMS 일치 — 정상\n\n‎")
     elif not screen_ok and not rms_ok:
-        st.error(f"🔴 {rms_status_text}\n\n✅ RMS 일치 — 협의 불가")
+        st.error(f"🔴 {rms_status_text}\n\n✅ RMS 일치 — 협의 불가\n\n‎")
     elif not screen_ok and rms_ok:
-        st.error(f"🟢 {rms_status_text}\n\n🚨 불일치 — RMS 매수금지 재설정 검토 필요")
+        st.error(f"🟢 {rms_status_text}\n\n🚨 불일치 — RMS 매수금지 재설정 검토 필요\n\n‎")
     else:
-        st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요")
+        st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요\n\n‎")
 
 
 # ═══════════════════════════════════════════════════════════
