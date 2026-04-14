@@ -307,9 +307,9 @@ if search_button and ticker:
                 col_j, col_r = st.columns(2)
                 with col_j:
                     if analysis['eligible']:
-                        st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
+                        st.success(f"**✅ {analysis['judgment']}**\n\n위험 등급: {analysis['risk_level']}")
                     else:
-                        st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
+                        st.error(f"**⛔ {analysis['judgment']}**\n\n위험 등급: {analysis['risk_level']}")
                 with col_r:
                     render_rms_result(ticker, analysis['eligible'])
 
@@ -417,9 +417,9 @@ if search_button and ticker:
                 col_j, col_r = st.columns(2)
                 with col_j:
                     if analysis['eligible']:
-                        st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
+                        st.success(f"**✅ {analysis['judgment']}**\n\n위험 등급: {analysis['risk_level']}")
                     else:
-                        st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
+                        st.error(f"**⛔ {analysis['judgment']}**\n\n위험 등급: {analysis['risk_level']}")
                 with col_r:
                     render_rms_result(ticker.upper(), analysis['eligible'])
 
