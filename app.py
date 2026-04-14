@@ -3,6 +3,7 @@
 실전 리스크관리 시스템
 """
 import streamlit as st
+from datetime import datetime
 from config import VERSION, SYSTEM_NAME
 from modules import (
     fetch_korean_stock,
@@ -13,63 +14,59 @@ from modules import (
     validate_us_stock_data,
     save_screening_log,
     export_to_excel,
-    save_rms_data,
-    load_rms_data,
+    parse_rms_excel,
     get_rms_status,
 )
 
 st.set_page_config(page_title=SYSTEM_NAME, page_icon="🏦", layout="wide")
 
-# ── 앱 시작 시 RMS 데이터 로드 ──────────────────────────────
+# ── session_state 초기화 ─────────────────────────────────────
 if 'rms_df' not in st.session_state:
-    df_loaded, meta_loaded = load_rms_data()
-    st.session_state['rms_df']   = df_loaded
-    st.session_state['rms_meta'] = meta_loaded
+    st.session_state['rms_df']          = None
+    st.session_state['rms_filename']    = None
+    st.session_state['rms_uploaded_at'] = None
+    st.session_state['rms_total']       = 0
+    st.session_state['rms_normal']      = 0
+    st.session_state['rms_restricted']  = 0
 
 
-# ── RMS 상태 표시 헬퍼 ──────────────────────────────────────
+# ── RMS 상태 표시 헬퍼 ───────────────────────────────────────
 def render_rms_result(ticker: str, screen_eligible: bool):
-    """
-    심사 결과 아래 RMS 상태 + 일치 여부 표시
-    RMS 미업로드 시 표시 안 함
-    """
+    """심사 결과 옆 RMS 상태 + 일치여부 표시. 미업로드 시 표시 안 함."""
     df_rms = st.session_state.get('rms_df')
     if df_rms is None:
         return
 
     rms = get_rms_status(ticker, df_rms)
     if not rms['found']:
-        st.caption("ℹ️ RMS 등록 종목 아님")
+        st.caption("ℹ️ RMS 미등록 종목")
         return
 
-    rms_ok     = (rms['status'] == '정상')
-    screen_ok  = screen_eligible
+    rms_ok    = (rms['status'] == '정상')
+    screen_ok = screen_eligible
 
-    # 일치/불일치 판별
     if screen_ok and rms_ok:
-        rms_icon = "🟢"
-        match_msg = "✅ RMS 일치 — 정상"
+        rms_icon    = "🟢"
+        match_msg   = "✅ RMS 일치 — 정상"
         match_color = "success"
     elif not screen_ok and not rms_ok:
-        rms_icon = "🔴"
-        match_msg = "✅ RMS 일치 — 협의 불가"
+        rms_icon    = "🔴"
+        match_msg   = "✅ RMS 일치 — 협의 불가"
         match_color = "error"
     elif not screen_ok and rms_ok:
-        rms_icon = "🟢"
-        match_msg = "🚨 RMS 불일치 — RMS 매수금지 재설정 검토 필요"
+        rms_icon    = "🟢"
+        match_msg   = "🚨 RMS 불일치 — RMS 매수금지 재설정 검토 필요"
         match_color = "error"
-    else:  # screen_ok and not rms_ok
-        rms_icon = "🔴"
-        match_msg = "⚠️ RMS 불일치 — RMS 매수가능 전환 검토 필요"
+    else:
+        rms_icon    = "🔴"
+        match_msg   = "⚠️ RMS 불일치 — RMS 매수가능 전환 검토 필요"
         match_color = "warning"
 
-    # RMS 상태 표시
     st.markdown(
         f"{rms_icon} **RMS 상태**: {rms['status']}"
         + (f" ({rms['raw']})" if rms['raw'] else "")
     )
 
-    # 일치 여부 표시
     if match_color == "success":
         st.success(match_msg)
     elif match_color == "error":
@@ -89,12 +86,13 @@ with st.sidebar:
     # ── RMS 파일 업로드 ──────────────────────────────────────
     st.header("📂 RMS 파일")
 
-    meta = st.session_state.get('rms_meta')
-    if meta:
+    if st.session_state['rms_uploaded_at']:
         st.success(
-            f"✅ 업로드: {meta['uploaded_at']}\n\n"
-            f"📄 {meta['filename']}\n\n"
-            f"전체 {meta['total']}개 | 정상 {meta['normal']} | 제한 {meta['restricted']}"
+            f"✅ 업로드: {st.session_state['rms_uploaded_at']}\n\n"
+            f"📄 {st.session_state['rms_filename']}\n\n"
+            f"전체 {st.session_state['rms_total']}개 "
+            f"| 정상 {st.session_state['rms_normal']} "
+            f"| 제한 {st.session_state['rms_restricted']}"
         )
     else:
         st.warning("⚠️ RMS 파일 미업로드")
@@ -107,14 +105,13 @@ with st.sidebar:
 
     if uploaded:
         try:
-            meta_new = save_rms_data(uploaded, uploaded.name)
-            df_new, _ = load_rms_data()
-            st.session_state['rms_df']   = df_new
-            st.session_state['rms_meta'] = meta_new
-            st.success(
-                f"✅ 업로드 완료\n\n"
-                f"전체 {meta_new['total']}개 | 정상 {meta_new['normal']} | 제한 {meta_new['restricted']}"
-            )
+            df_rms = parse_rms_excel(uploaded)
+            st.session_state['rms_df']          = df_rms
+            st.session_state['rms_filename']    = uploaded.name
+            st.session_state['rms_uploaded_at'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+            st.session_state['rms_total']       = len(df_rms)
+            st.session_state['rms_normal']      = int((df_rms['RMS상태'] == '정상').sum())
+            st.session_state['rms_restricted']  = int((df_rms['RMS상태'] != '정상').sum())
             st.rerun()
         except Exception as e:
             st.error(f"❌ 업로드 실패: {e}")
@@ -191,7 +188,6 @@ with st.sidebar:
 st.title("🏦 핀드 담보 심사 시스템")
 st.caption(f"KB증권 하이브리드 계좌운용규칙 | v{VERSION}")
 
-# 입력창 - 엔터 키 지원
 with st.form(key='search_form', clear_on_submit=False):
     col1, col2, col3 = st.columns([2, 1, 3])
     with col1:
@@ -214,7 +210,7 @@ if search_button and ticker:
         # ── 국내주식 ──────────────────────────────────────────
         with st.spinner("분석 중..."):
             try:
-                data     = fetch_korean_stock(ticker)
+                data = fetch_korean_stock(ticker)
                 is_valid, message = validate_korean_stock_data(data)
                 if not is_valid:
                     st.error(f"❌ {message}")
@@ -235,15 +231,13 @@ if search_button and ticker:
 
                 st.markdown("---")
 
-                # 판정 + RMS 상태를 나란히
+                # 판정 + RMS 상태 나란히
                 col_j, col_r = st.columns(2)
-
                 with col_j:
                     if analysis['eligible']:
                         st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
                     else:
                         st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
-
                 with col_r:
                     render_rms_result(ticker, analysis['eligible'])
 
@@ -253,7 +247,6 @@ if search_button and ticker:
                     f"\n💰 담보인정비율 {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})"
                     if analysis['acceptance_ratio'] < 100 else ""
                 )
-
                 st.info(
                     f"**{data['name']} ({ticker})** | {data['market']} · {analysis['cap_grade']}{sector_text}  \n"
                     f"시총 {data['market_cap']:,.0f}억 | 현재가 {data['current_price']:,.0f}원 | 변동성 {analysis['volatility']:.1f}%  \n"
@@ -262,15 +255,12 @@ if search_button and ticker:
 
                 st.markdown("---")
 
-                # 불가 사유 및 리스크
                 if analysis['violations']:
                     col_v1, col_v2 = st.columns(2)
-
                     with col_v1:
                         st.markdown("**❌ 담보 불가 사유**")
                         for v in analysis['violations']:
                             st.markdown(f"• {v.replace('❌ ', '')}")
-
                     with col_v2:
                         st.markdown("**⚠️ 주요 리스크**")
                         for r in analysis['risk_factors']:
@@ -295,11 +285,10 @@ if search_button and ticker:
 
 **일일 모니터링 필수**
 
-※ 계좌운용규칙(LTV, 로스컷)은 상품별로 상이  
+※ 계좌운용규칙(LTV, 로스컷)은 상품별로 상이
 ※ DART 재무제표 확인 후 조정 가능성 검토
                         """)
 
-                # 엑셀 다운로드
                 st.markdown("---")
                 col_d1, col_d2, col_d3 = st.columns([1, 1, 2])
                 with col_d1:
@@ -326,7 +315,7 @@ if search_button and ticker:
         # ── 해외주식 ──────────────────────────────────────────
         with st.spinner("분석 중..."):
             try:
-                data     = fetch_us_stock(ticker)
+                data = fetch_us_stock(ticker)
                 is_valid, message = validate_us_stock_data(data)
                 if not is_valid:
                     st.error(f"❌ {message}")
@@ -347,15 +336,13 @@ if search_button and ticker:
 
                 st.markdown("---")
 
-                # 판정 + RMS 상태를 나란히
+                # 판정 + RMS 상태 나란히
                 col_j, col_r = st.columns(2)
-
                 with col_j:
                     if analysis['eligible']:
                         st.success(f"**✅ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
                     else:
                         st.error(f"**⛔ {analysis['judgment']} | 위험 등급: {analysis['risk_level']}**")
-
                 with col_r:
                     render_rms_result(ticker.upper(), analysis['eligible'])
 
@@ -370,7 +357,6 @@ if search_button and ticker:
                     f"\n💰 담보인정비율 {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})"
                     if analysis['acceptance_ratio'] < 100 else ""
                 )
-
                 st.info(
                     f"**{data['name']} ({ticker.upper()})** | {data['exchange']} · {analysis.get('cap_category', 'N/A')}{sector_text}  \n"
                     f"{data['mcap_label']} ${data['mcap']:.2f}B | 현재가 ${data['price']:.2f} | 변동성 {analysis['volatility']:.1f}%  \n"
@@ -379,15 +365,12 @@ if search_button and ticker:
 
                 st.markdown("---")
 
-                # 불가 사유 및 리스크
                 if analysis['violations']:
                     col_v1, col_v2 = st.columns(2)
-
                     with col_v1:
                         st.markdown("**❌ 담보 불가 사유**")
                         for v in analysis['violations']:
                             st.markdown(f"• {v.replace('❌ ', '')}")
-
                     with col_v2:
                         st.markdown("**⚠️ 주요 리스크**")
                         for r in analysis['risk_factors']:
@@ -413,7 +396,6 @@ if search_button and ticker:
 ※ 계좌운용규칙은 상품별로 상이
                         """)
 
-                # 엑셀 다운로드
                 st.markdown("---")
                 col_d1, col_d2, col_d3 = st.columns([1, 1, 2])
                 with col_d1:
