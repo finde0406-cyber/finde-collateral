@@ -60,14 +60,12 @@ def render_rms_result(ticker: str, screen_eligible: bool):
         st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요")
 
 
-# ── DART 재무 요약 표시 헬퍼 ────────────────────────────────
+# ── 국내주식 DART 재무 요약 표시 ─────────────────────────────
 def render_dart_summary(dart_summary: dict):
-    """DART 재무 요약 박스 표시"""
     if not dart_summary:
         return
 
     st.markdown("### 📊 DART 재무 분석")
-
     year = dart_summary.get('latest_year', '')
 
     col1, col2, col3, col4 = st.columns(4)
@@ -99,7 +97,7 @@ def render_dart_summary(dart_summary: dict):
         col2.metric("부채비율", "N/A")
 
     # 감사의견
-    opinion = dart_summary.get('audit_opinion', 'N/A')
+    opinion    = dart_summary.get('audit_opinion', 'N/A')
     audit_year = dart_summary.get('audit_year', '')
     if opinion in ['부적정', '의견거절']:
         col3.metric("감사의견", opinion, delta="즉시불가", delta_color="inverse")
@@ -110,7 +108,7 @@ def render_dart_summary(dart_summary: dict):
     else:
         col3.metric("감사의견", opinion or "N/A")
 
-    # 영업손실 연속
+    # 연속 영업손실
     loss_years = dart_summary.get('loss_years', [])
     if len(loss_years) >= 3:
         col4.metric("연속 영업손실", f"{len(loss_years)}년", delta="위험", delta_color="inverse")
@@ -126,14 +124,76 @@ def render_dart_summary(dart_summary: dict):
     if risk_discs:
         st.markdown("**⚠️ 최근 위험 공시**")
         for disc in risk_discs:
-            date_str = disc['date']
-            formatted = f"{date_str[:4]}.{date_str[4:6]}.{date_str[6:]}"
-            st.markdown(f"• {formatted} — {disc['title']}")
+            d = disc['date']
+            st.markdown(f"• {d[:4]}.{d[4:6]}.{d[6:]} — {disc['title']}")
 
     # 매출 변동
     rev_change = dart_summary.get('revenue_change')
     if rev_change is not None and rev_change <= -30:
         st.warning(f"⚠️ 매출 변동: {rev_change:.1f}% ({year}년 기준)")
+
+    st.markdown("---")
+
+
+# ── 해외주식 재무 요약 표시 ──────────────────────────────────
+def render_us_financial_summary(financial_summary: dict, quote_type: str):
+    if not financial_summary or quote_type == 'ETF':
+        return
+
+    st.markdown("### 📊 재무 분석")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    # 부채비율
+    d2e = financial_summary.get('debt_to_equity')
+    if d2e is not None:
+        if d2e >= 300:
+            col1.metric("부채비율", f"{d2e:.0f}%", delta="위험", delta_color="inverse")
+        elif d2e >= 200:
+            col1.metric("부채비율", f"{d2e:.0f}%", delta="주의", delta_color="inverse")
+        else:
+            col1.metric("부채비율", f"{d2e:.0f}%", delta="정상", delta_color="normal")
+    else:
+        col1.metric("부채비율", "N/A")
+
+    # ROE
+    roe = financial_summary.get('roe')
+    if roe is not None:
+        if roe < -20:
+            col2.metric("ROE", f"{roe:.1f}%", delta="위험", delta_color="inverse")
+        elif roe < 0:
+            col2.metric("ROE", f"{roe:.1f}%", delta="적자", delta_color="inverse")
+        else:
+            col2.metric("ROE", f"{roe:.1f}%", delta="정상", delta_color="normal")
+    else:
+        col2.metric("ROE", "N/A")
+
+    # 영업이익률
+    op_margin = financial_summary.get('operating_margins')
+    if op_margin is not None:
+        if op_margin < -20:
+            col3.metric("영업이익률", f"{op_margin:.1f}%", delta="위험", delta_color="inverse")
+        elif op_margin < 0:
+            col3.metric("영업이익률", f"{op_margin:.1f}%", delta="적자", delta_color="inverse")
+        else:
+            col3.metric("영업이익률", f"{op_margin:.1f}%", delta="정상", delta_color="normal")
+    else:
+        col3.metric("영업이익률", "N/A")
+
+    # 유동비율
+    current_ratio = financial_summary.get('current_ratio')
+    if current_ratio is not None:
+        if current_ratio < 1.0:
+            col4.metric("유동비율", f"{current_ratio:.2f}", delta="부족", delta_color="inverse")
+        else:
+            col4.metric("유동비율", f"{current_ratio:.2f}", delta="정상", delta_color="normal")
+    else:
+        col4.metric("유동비율", "N/A")
+
+    # 매출 성장률
+    rev_growth = financial_summary.get('revenue_growth')
+    if rev_growth is not None and rev_growth <= -30:
+        st.warning(f"⚠️ 매출 성장률 {rev_growth:.1f}% — 급감")
 
     st.markdown("---")
 
@@ -146,7 +206,6 @@ with st.sidebar:
     st.caption(f"KB증권 하이브리드 | v{VERSION}")
     st.markdown("---")
 
-    # ── RMS 파일 업로드 ──────────────────────────────────────
     st.header("📂 RMS 파일")
 
     if st.session_state['rms_uploaded_at']:
@@ -184,7 +243,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ── 심사 기준 안내 ────────────────────────────────────────
     st.header("📖 가이드")
     st.markdown("**국내**: `005930`  \n**해외**: `AAPL`")
     st.markdown("---")
@@ -194,7 +252,6 @@ with st.sidebar:
         - 관리종목
         - 동전주 (1,000원 미만)
         - 시총 500억 미만
-        - 변동성 극심
         - 완전자본잠식
         - 감사의견 부적정/의견거절
         - 3년 연속 영업손실
@@ -206,18 +263,19 @@ with st.sidebar:
         - Penny Stock ($5 미만)
         - 소형주 ($1B 미만)
         - 거래소 기준 미달
-        - 변동성 극심
+        - 완전자본잠식
+        - 고베타 (3.0 초과)
         """)
 
     with st.expander("📊 국내주식 등급"):
         st.markdown("""
         **시총 순위 기준 (근사치)**:
         - 초대형주: 10조+
-        - 대형주: 5조~10조 (상위 100위)
-        - 중형주: 5천억~5조 (상위 300위)
-        - 소형주: 500억~5천억 (301위+)
+        - 대형주: 5조~10조
+        - 중형주: 5천억~5조
+        - 소형주: 500억~5천억
 
-        **변동성 한도**:
+        **변동성 한도** (담보인정비율 조정):
         - 초대형/대형: 500%
         - 중형: 300%
         - 소형: 200%
@@ -232,10 +290,6 @@ with st.sidebar:
         - 250~300%: 70%
         - 200~250%: 80%
         - 200% 미만: 100%
-
-        **예시**:
-        평가 1억원 × 70% = 7천만원 인정
-        → 대출 가능 1.4억원 (LTV 200%)
         """)
 
     with st.expander("⚙️ 2026년 강화 기준"):
@@ -286,24 +340,17 @@ if search_button and ticker:
                     st.info("💡 잠시 후 다시 시도하거나 관리자에게 문의하세요")
                     st.stop()
 
-                # DART 분석 (국내주식만)
                 dart_data = get_dart_analysis(ticker)
-
-                analysis = analyze_korean_stock(data, dart_data)
+                analysis  = analyze_korean_stock(data, dart_data)
 
                 save_screening_log(
-                    ticker,
-                    data['name'],
-                    data['market_cap'],
-                    analysis['volatility'],
-                    analysis['judgment'],
-                    analysis['acceptance_ratio'],
-                    analysis['violations']
+                    ticker, data['name'], data['market_cap'],
+                    analysis['volatility'], analysis['judgment'],
+                    analysis['acceptance_ratio'], analysis['violations']
                 )
 
                 st.markdown("---")
 
-                # 판정 + RMS 상태 나란히
                 col_j, col_r = st.columns(2)
                 with col_j:
                     if analysis['eligible']:
@@ -313,7 +360,6 @@ if search_button and ticker:
                 with col_r:
                     render_rms_result(ticker, analysis['eligible'])
 
-                # 통합 정보 박스
                 sector_text = f" · {data.get('sector', '')}" if data.get('sector') != 'N/A' else ""
                 ratio_text  = (
                     f"\n💰 담보인정비율 {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})"
@@ -327,33 +373,31 @@ if search_button and ticker:
 
                 st.markdown("---")
 
-                # DART 재무 요약
                 if analysis.get('dart_summary'):
                     render_dart_summary(analysis['dart_summary'])
 
-                # 불가 사유 및 리스크
-                if analysis['violations']:
+                if analysis['violations'] or analysis['risk_factors']:
                     col_v1, col_v2 = st.columns(2)
                     with col_v1:
-                        st.markdown("**❌ 담보 불가 사유**")
-                        for v in analysis['violations']:
-                            st.markdown(f"• {v.replace('❌ ', '')}")
+                        if analysis['violations']:
+                            st.markdown("**❌ 담보 불가 사유**")
+                            for v in analysis['violations']:
+                                st.markdown(f"• {v.replace('❌ ', '')}")
                     with col_v2:
-                        st.markdown("**⚠️ 주요 리스크**")
-                        for r in analysis['risk_factors']:
-                            st.markdown(f"• {r}")
+                        if analysis['risk_factors']:
+                            st.markdown("**⚠️ 주요 리스크**")
+                            for r in analysis['risk_factors']:
+                                st.markdown(f"• {r.replace('⚠️ ', '')}")
 
                     st.markdown("---")
 
                     with st.expander("💼 심사 의견 (상세)", expanded=False):
                         st.markdown(f"""
 **변동성 리스크**
-- 52주 변동폭 {analysis['volatility']:.1f}%는 {analysis['cap_grade']}로서 {'매우 높은' if analysis['volatility'] > 300 else '높은'} 수준
+- 52주 변동폭 {analysis['volatility']:.1f}% ({analysis['cap_grade']})
 
 **현재가 위치**
 - 52주 범위 중 {analysis['price_position']:.1f}% 지점
-- 최고가 대비 {100 - analysis['price_position']:.1f}% 하락 여력
-- 최저가 대비 {analysis['price_position']:.1f}% 상승한 상태
 
 **담보인정비율 (권장)**
 - 권장: **{analysis['acceptance_ratio']}%**
@@ -363,7 +407,6 @@ if search_button and ticker:
 **일일 모니터링 필수**
 
 ※ 계좌운용규칙(LTV, 로스컷)은 상품별로 상이
-※ DART 재무제표 확인 후 조정 가능성 검토
                         """)
 
                 st.markdown("---")
@@ -402,18 +445,13 @@ if search_button and ticker:
                 analysis = analyze_us_stock(data)
 
                 save_screening_log(
-                    ticker,
-                    data['name'],
-                    data['mcap'],
-                    analysis['volatility'],
-                    analysis['judgment'],
-                    analysis['acceptance_ratio'],
-                    analysis['violations']
+                    ticker, data['name'], data['mcap'],
+                    analysis['volatility'], analysis['judgment'],
+                    analysis['acceptance_ratio'], analysis['violations']
                 )
 
                 st.markdown("---")
 
-                # 판정 + RMS 상태 나란히
                 col_j, col_r = st.columns(2)
                 with col_j:
                     if analysis['eligible']:
@@ -423,7 +461,6 @@ if search_button and ticker:
                 with col_r:
                     render_rms_result(ticker.upper(), analysis['eligible'])
 
-                # 통합 정보 박스
                 sector_text = ""
                 if data.get('sector') != 'N/A':
                     sector_text += f" · {data['sector']}"
@@ -442,16 +479,25 @@ if search_button and ticker:
 
                 st.markdown("---")
 
-                if analysis['violations']:
+                # 해외주식 재무 요약
+                if analysis.get('financial_summary'):
+                    render_us_financial_summary(
+                        analysis['financial_summary'],
+                        data.get('quote_type', '')
+                    )
+
+                if analysis['violations'] or analysis['risk_factors']:
                     col_v1, col_v2 = st.columns(2)
                     with col_v1:
-                        st.markdown("**❌ 담보 불가 사유**")
-                        for v in analysis['violations']:
-                            st.markdown(f"• {v.replace('❌ ', '')}")
+                        if analysis['violations']:
+                            st.markdown("**❌ 담보 불가 사유**")
+                            for v in analysis['violations']:
+                                st.markdown(f"• {v.replace('❌ ', '')}")
                     with col_v2:
-                        st.markdown("**⚠️ 주요 리스크**")
-                        for r in analysis['risk_factors']:
-                            st.markdown(f"• {r}")
+                        if analysis['risk_factors']:
+                            st.markdown("**⚠️ 주요 리스크**")
+                            for r in analysis['risk_factors']:
+                                st.markdown(f"• {r.replace('⚠️ ', '')}")
 
                     st.markdown("---")
 
