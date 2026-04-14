@@ -452,9 +452,10 @@ if search_button and ticker:
                     f"\n💰 담보인정비율 {analysis['acceptance_ratio']}% ({analysis['ratio_reason']})"
                     if analysis['acceptance_ratio'] < 100 else ""
                 )
+                mcap_display = f"${data['mcap']:.2f}B" if data['mcap'] > 0 else "조회불가"
                 st.info(
                     f"**{data['name']} ({ticker.upper()})** | {data['exchange']} · {analysis.get('cap_category', 'N/A')}{sector_text}  \n"
-                    f"{data['mcap_label']} ${data['mcap']:.2f}B | 현재가 ${data['price']:.2f} | 변동성 {analysis['volatility']:.1f}%  \n"
+                    f"{data['mcap_label']} {mcap_display} | 현재가 ${data['price']:.2f} | 변동성 {analysis['volatility']:.1f}%  \n"
                     f"52주 ${data['high_52w']:.2f} ~ ${data['low_52w']:.2f} (현재 위치 {analysis['price_position']:.1f}%){ratio_text}"
                 )
 
