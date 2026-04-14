@@ -13,7 +13,6 @@ from modules import (
     validate_korean_stock_data,
     validate_us_stock_data,
     save_screening_log,
-    export_to_excel,
     parse_rms_excel,
     get_rms_status,
     get_dart_analysis,
@@ -409,24 +408,6 @@ if search_button and ticker:
 ※ 계좌운용규칙(LTV, 로스컷)은 상품별로 상이
                         """)
 
-                st.markdown("---")
-                col_d1, col_d2, col_d3 = st.columns([1, 1, 2])
-                with col_d1:
-                    if st.button("📥 엑셀로 다운로드", use_container_width=True):
-                        filename = export_to_excel(ticker, data, analysis)
-                        if filename:
-                            with open(filename, 'rb') as f:
-                                st.download_button(
-                                    label="⬇️ 파일 다운로드",
-                                    data=f,
-                                    file_name=filename,
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True
-                                )
-                            st.success("✅ 생성 완료")
-                        else:
-                            st.error("생성 실패")
-
             except Exception as e:
                 st.error(f"❌ 시스템 오류: {str(e)}")
                 st.error("관리자에게 문의하세요")
@@ -518,24 +499,6 @@ if search_button and ticker:
 
 ※ 계좌운용규칙은 상품별로 상이
                         """)
-
-                st.markdown("---")
-                col_d1, col_d2, col_d3 = st.columns([1, 1, 2])
-                with col_d1:
-                    if st.button("📥 엑셀로 다운로드", use_container_width=True):
-                        filename = export_to_excel(ticker, data, analysis)
-                        if filename:
-                            with open(filename, 'rb') as f:
-                                st.download_button(
-                                    label="⬇️ 파일 다운로드",
-                                    data=f,
-                                    file_name=filename,
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True
-                                )
-                            st.success("✅ 생성 완료")
-                        else:
-                            st.error("생성 실패")
 
             except Exception as e:
                 st.error(f"❌ 시스템 오류: {str(e)}")
