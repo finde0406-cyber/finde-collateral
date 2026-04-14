@@ -46,7 +46,6 @@ def fetch_corp_code(stock_code: str):
         return None
 
 
-@st.cache_data(ttl=3600)
 def fetch_financial_year(corp_code: str, year: int):
     """특정 연도 재무데이터 조회 (1시간 캐시)"""
     for fs_div in ['CFS', 'OFS']:
@@ -94,7 +93,6 @@ def fetch_financial_year(corp_code: str, year: int):
     return None
 
 
-@st.cache_data(ttl=3600)
 def fetch_financial_data(corp_code: str) -> list:
     """최근 2년 재무데이터 병렬 조회 (1시간 캐시)"""
     current_year = datetime.now().year
@@ -112,7 +110,6 @@ def fetch_financial_data(corp_code: str) -> list:
     return sorted(results, key=lambda x: x['year'], reverse=True)
 
 
-@st.cache_data(ttl=3600)
 def fetch_audit_opinion(corp_code: str) -> dict:
     """최근 감사의견 조회 (1시간 캐시)"""
     try:
@@ -153,7 +150,6 @@ def fetch_audit_opinion(corp_code: str) -> dict:
         return {'opinion': None, 'year': None}
 
 
-@st.cache_data(ttl=3600)
 def fetch_risk_disclosures(corp_code: str) -> list:
     """최근 1년 위험 공시 탐지 (1시간 캐시)"""
     try:
@@ -186,7 +182,6 @@ def fetch_risk_disclosures(corp_code: str) -> list:
         return []
 
 
-@st.cache_data(ttl=3600)
 def get_dart_analysis(stock_code: str) -> dict:
     """
     메인 함수 — DART 전체 분석 (1시간 캐시)
