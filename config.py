@@ -7,6 +7,7 @@ SYSTEM_NAME = "핀드 담보 심사 시스템"
 
 # DART API
 DART_API_KEY = "2a943c8700adfcb64e1e1500318e480ad2684bf5"
+FINNHUB_API_KEY = "d7etdh1r01qi33g7j9j0d7etdh1r01qi33g7j9jg"
 
 # 국내주식 기준
 KOREAN_STOCK = {
