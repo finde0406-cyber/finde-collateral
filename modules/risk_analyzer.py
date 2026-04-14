@@ -7,7 +7,7 @@ from config import KOREAN_STOCK, US_STOCK, ACCEPTANCE_RATIO
 
 
 def calculate_acceptance_ratio(violations, volatility):
-    """담보인정비율 계산 - 재무/상폐 위험만 0% 처리"""
+    """담보인정비율 계산"""
     if any('관리종목' in v or '동전주' in v or '시총' in v or
            '자본잠식' in v or '감사의견' in v or '영업손실' in v for v in violations):
         return 0, "상장폐지 위험"
@@ -44,13 +44,11 @@ def analyze_dart_data(dart_data: dict) -> tuple:
     if dart_data.get('error'):
         return violations, risk_factors, dart_summary
 
-    # ── 재무제표 분석 ──────────────────────────────────────
     financial = dart_data.get('financial', [])
     if financial:
         latest    = financial[0]
         equity    = latest.get('equity')
         debt      = latest.get('debt')
-        op_income = latest.get('op_income')
         year      = latest.get('year')
 
         dart_summary['latest_year'] = year
@@ -61,40 +59,34 @@ def analyze_dart_data(dart_data: dict) -> tuple:
             dart_summary['debt']         = debt
             dart_summary['total_assets'] = total_assets
 
-            # 완전자본잠식 → 담보 불가
             if equity <= 0:
                 violations.append(f"❌ 완전자본잠식 ({year}년 자본총계 {equity/100000000:,.0f}억)")
                 risk_factors.append("상장폐지 실질심사 대상 가능")
             elif total_assets > 0:
                 erosion_rate = (1 - equity / total_assets) * 100
                 dart_summary['erosion_rate'] = erosion_rate
-                # 자본잠식 50% 이상 → 담보 불가
                 if erosion_rate >= 50:
                     violations.append(f"❌ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 관리종목 기준 초과")
                     risk_factors.append("자본잠식 50% 이상 — 관리종목 지정 가능")
                 elif erosion_rate >= 30:
                     risk_factors.append(f"⚠️ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 주의 필요")
 
-            # 부채비율 → 경고만
             if equity > 0:
                 debt_ratio = (debt / equity) * 100
                 dart_summary['debt_ratio'] = debt_ratio
                 if debt_ratio >= 300:
                     risk_factors.append(f"⚠️ 부채비율 {debt_ratio:.0f}% ({year}년) — 재무 위험")
 
-        # 영업손실 연속 체크
         if len(financial) >= 2:
             loss_years = [f['year'] for f in financial
                           if f.get('op_income') is not None and f['op_income'] < 0]
             dart_summary['loss_years'] = loss_years
-            # 3년 연속 → 담보 불가
             if len(loss_years) >= 3:
                 violations.append(f"❌ 3년 연속 영업손실 ({', '.join(map(str, loss_years))})")
                 risk_factors.append("상장폐지 실질심사 대상 가능")
             elif len(loss_years) == 2:
                 risk_factors.append(f"⚠️ 2년 연속 영업손실 ({', '.join(map(str, loss_years))})")
 
-        # 매출 급감
         if len(financial) >= 2:
             rev_latest = financial[0].get('revenue')
             rev_prev   = financial[1].get('revenue')
@@ -112,7 +104,6 @@ def analyze_dart_data(dart_data: dict) -> tuple:
                         f"({financial[1]['year']}→{financial[0]['year']})"
                     )
 
-    # ── 감사의견 분석 ──────────────────────────────────────
     audit      = dart_data.get('audit', {})
     opinion    = audit.get('opinion', '')
     audit_year = audit.get('year', '')
@@ -120,14 +111,12 @@ def analyze_dart_data(dart_data: dict) -> tuple:
     if opinion:
         dart_summary['audit_opinion'] = opinion
         dart_summary['audit_year']    = audit_year
-
         if any(kw in opinion for kw in ['부적정', '의견거절']):
             violations.append(f"❌ 감사의견 '{opinion}' ({audit_year}년) — 즉시 담보 불가")
             risk_factors.append("감사의견 부적정/의견거절 — 상장폐지 사유")
         elif '한정' in opinion:
             risk_factors.append(f"⚠️ 감사의견 '한정' ({audit_year}년) — 재무 신뢰성 주의")
 
-    # ── 위험 공시 분석 ──────────────────────────────────────
     risk_disclosures = dart_data.get('risk_disclosures', [])
     if risk_disclosures:
         dart_summary['risk_disclosures'] = risk_disclosures
@@ -138,6 +127,76 @@ def analyze_dart_data(dart_data: dict) -> tuple:
             )
 
     return violations, risk_factors, dart_summary
+
+
+def analyze_us_financial(data: dict) -> tuple:
+    """
+    해외주식 재무 데이터 분석 (yfinance 기반)
+    반환: violations, risk_factors, financial_summary
+    """
+    violations        = []
+    risk_factors      = []
+    financial_summary = {}
+
+    debt_to_equity    = data.get('debt_to_equity')
+    return_on_equity  = data.get('return_on_equity')
+    current_ratio     = data.get('current_ratio')
+    operating_margins = data.get('operating_margins')
+    revenue_growth    = data.get('revenue_growth')
+    total_equity      = data.get('total_equity')
+    quote_type        = data.get('quote_type', '')
+
+    # ETF는 재무 분석 제외
+    if quote_type == 'ETF':
+        return violations, risk_factors, financial_summary
+
+    # 자본총계 음수 → 완전자본잠식
+    if total_equity is not None:
+        financial_summary['total_equity'] = total_equity
+        if total_equity < 0:
+            violations.append(f"❌ 완전자본잠식 (자본총계 ${total_equity/1e9:.2f}B)")
+            risk_factors.append("상장폐지 위험 — 자본잠식")
+
+    # 부채비율
+    if debt_to_equity is not None and debt_to_equity > 0:
+        financial_summary['debt_to_equity'] = debt_to_equity
+        if debt_to_equity >= 300:
+            risk_factors.append(f"⚠️ 부채비율 {debt_to_equity:.0f}% — 재무 위험")
+        elif debt_to_equity >= 200:
+            risk_factors.append(f"⚠️ 부채비율 {debt_to_equity:.0f}% — 주의")
+
+    # ROE
+    if return_on_equity is not None:
+        roe_pct = return_on_equity * 100
+        financial_summary['roe'] = roe_pct
+        if roe_pct < -20:
+            risk_factors.append(f"⚠️ ROE {roe_pct:.1f}% — 수익성 심각")
+        elif roe_pct < 0:
+            risk_factors.append(f"⚠️ ROE {roe_pct:.1f}% — 수익성 적자")
+
+    # 유동비율
+    if current_ratio is not None:
+        financial_summary['current_ratio'] = current_ratio
+        if current_ratio < 1.0:
+            risk_factors.append(f"⚠️ 유동비율 {current_ratio:.2f} — 단기 유동성 부족")
+
+    # 영업이익률
+    if operating_margins is not None:
+        op_margin_pct = operating_margins * 100
+        financial_summary['operating_margins'] = op_margin_pct
+        if op_margin_pct < -20:
+            risk_factors.append(f"⚠️ 영업이익률 {op_margin_pct:.1f}% — 사업 적자 심각")
+        elif op_margin_pct < 0:
+            risk_factors.append(f"⚠️ 영업이익률 {op_margin_pct:.1f}% — 영업 적자")
+
+    # 매출 성장률
+    if revenue_growth is not None:
+        rev_growth_pct = revenue_growth * 100
+        financial_summary['revenue_growth'] = rev_growth_pct
+        if rev_growth_pct <= -30:
+            risk_factors.append(f"⚠️ 매출 성장률 {rev_growth_pct:.1f}% — 급감")
+
+    return violations, risk_factors, financial_summary
 
 
 def analyze_korean_stock(data, dart_data=None):
@@ -157,7 +216,6 @@ def analyze_korean_stock(data, dart_data=None):
     violations   = []
     risk_factors = []
 
-    # ── 기본 심사 ───────────────────────────────────────────
     if dept == '관리':
         violations.append("❌ 관리종목")
         risk_factors.append("상장폐지 가능성")
@@ -176,11 +234,9 @@ def analyze_korean_stock(data, dart_data=None):
             violations.append(f"❌ 시총 {market_cap:,.0f}억")
         risk_factors.append("유동성 부족")
 
-    # backup_warning → 경고만 표시 (불가 판정 없음)
     if data.get('backup_warning'):
         risk_factors.append("⚠️ 관리종목 실시간 확인 불가 (수동 확인 필요)")
 
-    # ── 시총 등급 분류 ──────────────────────────────────────
     limits = KOREAN_STOCK['volatility_limits']
 
     if market_cap >= 100000:
@@ -199,7 +255,6 @@ def analyze_korean_stock(data, dart_data=None):
         cap_grade        = "극소형주"
         volatility_limit = limits['micro']
 
-    # ── 변동성 → 경고만 표시, 담보인정비율로만 반영 ────────
     if volatility >= volatility_limit and market_cap >= min_cap:
         risk_factors.append(
             f"⚠️ 높은 변동성 {volatility:.1f}% ({cap_grade} 기준 {volatility_limit}%)"
@@ -219,7 +274,6 @@ def analyze_korean_stock(data, dart_data=None):
         else:
             risk_factors.append("저점권 — 추가 하락 가능")
 
-    # ── DART 데이터 심사 ────────────────────────────────────
     dart_summary = {}
     if dart_data:
         dart_violations, dart_risks, dart_summary = analyze_dart_data(dart_data)
@@ -255,7 +309,7 @@ def analyze_korean_stock(data, dart_data=None):
 
 
 def analyze_us_stock(data):
-    """해외주식 리스크 분석"""
+    """해외주식 리스크 분석 (재무 데이터 포함)"""
     exchange   = data['exchange']
     mcap       = data['mcap']
     price      = data['price']
@@ -312,6 +366,9 @@ def analyze_us_stock(data):
     if volume > 0 and volume < US_STOCK['min_volume']:
         violations.append("❌ 거래량 부족")
 
+    if beta > US_STOCK['max_beta']:
+        violations.append(f"❌ 고베타 {beta:.2f}")
+
     limits = US_STOCK['volatility_limits']
 
     if mcap >= 50:
@@ -330,7 +387,6 @@ def analyze_us_stock(data):
         cap_category     = "극소형주"
         volatility_limit = limits['micro']
 
-    # 변동성 → 경고만 표시
     if volatility >= volatility_limit:
         risk_factors.append(
             f"⚠️ 높은 변동성 {volatility:.1f}% ({cap_category} 기준 {volatility_limit}%)"
@@ -350,8 +406,10 @@ def analyze_us_stock(data):
         else:
             risk_factors.append("저점권 — 추가 하락 가능")
 
-    if beta > US_STOCK['max_beta']:
-        violations.append(f"❌ 고베타 {beta:.2f}")
+    # ── 해외 재무 분석 ──────────────────────────────────────
+    fin_violations, fin_risks, financial_summary = analyze_us_financial(data)
+    violations   += fin_violations
+    risk_factors += fin_risks
 
     acceptance_ratio, ratio_reason = calculate_acceptance_ratio(violations, volatility)
 
@@ -365,18 +423,18 @@ def analyze_us_stock(data):
         eligible   = True
 
     return {
-        'judgment'        : judgment,
-        'risk_level'      : risk_level,
-        'eligible'        : eligible,
-        'violations'      : violations,
-        'risk_factors'    : risk_factors,
-        'volatility'      : volatility,
-        'price_position'  : price_position,
-        'mcap'            : mcap,
-        'price'           : price,
-        'quote_type'      : quote_type,
-        'cap_category'    : cap_category,
-        'acceptance_ratio': acceptance_ratio,
-        'ratio_reason'    : ratio_reason,
-        'dart_summary'    : {},
+        'judgment'          : judgment,
+        'risk_level'        : risk_level,
+        'eligible'          : eligible,
+        'violations'        : violations,
+        'risk_factors'      : risk_factors,
+        'volatility'        : volatility,
+        'price_position'    : price_position,
+        'mcap'              : mcap,
+        'price'             : price,
+        'quote_type'        : quote_type,
+        'cap_category'      : cap_category,
+        'acceptance_ratio'  : acceptance_ratio,
+        'ratio_reason'      : ratio_reason,
+        'financial_summary' : financial_summary,
     }
