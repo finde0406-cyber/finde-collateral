@@ -50,3 +50,8 @@ ACCEPTANCE_RATIO = {
 
 CACHE_TTL = 3600
 LOG_FILE = "screening_history.csv"
+
+# 환율 (월별 수동 업데이트)
+USD_KRW = 1450
+HKD_KRW = 186
+CNY_KRW = 200
