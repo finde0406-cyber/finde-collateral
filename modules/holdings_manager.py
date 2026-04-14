@@ -119,7 +119,13 @@ def get_holdings_status(ticker: str, df_holdings: pd.DataFrame,
         return {'found': False}
 
     ticker_clean = ticker.strip().upper()
+
+    # 1차: 그대로 조회
     match = df_holdings[df_holdings['종목코드'].str.strip().str.upper() == ticker_clean]
+
+    # 2차: A 붙여서 조회 (한국 6자리 숫자인 경우)
+    if match.empty and ticker_clean.isdigit() and len(ticker_clean) == 6:
+        match = df_holdings[df_holdings['종목코드'].str.strip().str.upper() == 'A' + ticker_clean]
 
     if match.empty:
         return {'found': False}
