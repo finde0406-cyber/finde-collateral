@@ -1,6 +1,7 @@
 """
 RMS 일별 종목관리현황 모듈
-- G열(index 6): 종목코드
+- D열(index 3): 국가
+- H열(index 7): 종목코드
 - J열(index 9): 종목상태 (빈칸=정상, 값있음=제한)
 - 한국: A+6자리 숫자
 - 중국: 6자리 숫자
@@ -8,18 +9,6 @@ RMS 일별 종목관리현황 모듈
 - 미국: 영문 티커
 """
 import pandas as pd
-
-
-def detect_country(code: str) -> str:
-    """종목코드로 국가 감지"""
-    code = str(code).strip()
-    if code.upper().startswith('A') and len(code) == 7 and code[1:].isdigit():
-        return '한국'
-    if code.isdigit() and len(code) == 5:
-        return '홍콩'
-    if code.isdigit() and len(code) == 6:
-        return '중국'
-    return '미국'
 
 
 def get_clean_code(code: str, country: str) -> str:
@@ -33,7 +22,8 @@ def get_clean_code(code: str, country: str) -> str:
 def parse_rms_excel(file) -> pd.DataFrame:
     """
     RMS 엑셀 파싱
-    G열(index 6): 종목코드
+    D열(index 3): 국가
+    H열(index 7): 종목코드
     J열(index 9): 종목상태
     반환: DataFrame {종목코드_원본, 종목코드, 국가, RMS상태, RMS상태원문}
     """
@@ -44,16 +34,19 @@ def parse_rms_excel(file) -> pd.DataFrame:
         raise ValueError(f"열 개수 부족: {df_raw.shape[1]}열 (최소 10열 필요)")
 
     df = pd.DataFrame()
-    df['종목코드_원본'] = df_raw.iloc[:, 6].str.strip()
-    df['RMS상태원문']   = df_raw.iloc[:, 9].str.strip()
+    df['국가']          = df_raw.iloc[:, 3].str.strip()   # D열
+    df['종목코드_원본'] = df_raw.iloc[:, 7].str.strip()   # H열
+    df['RMS상태원문']   = df_raw.iloc[:, 9].str.strip()   # J열
 
     # 빈 종목코드 제거
     df = df[df['종목코드_원본'] != ''].reset_index(drop=True)
 
-    df['국가']     = df['종목코드_원본'].apply(detect_country)
+    # 심사용 코드 (한국은 A 제거)
     df['종목코드'] = df.apply(
         lambda r: get_clean_code(r['종목코드_원본'], r['국가']), axis=1
     )
+
+    # RMS 상태
     df['RMS상태'] = df['RMS상태원문'].apply(
         lambda x: '정상' if x == '' else f'제한({x})'
     )
@@ -75,11 +68,7 @@ def get_rms_status(ticker: str, df_rms: pd.DataFrame) -> dict:
     # 1차: 종목코드 열(A 제거된 코드)로 조회
     match = df_rms[df_rms['종목코드'].str.strip().str.upper() == ticker_clean]
 
-    # 2차: 종목코드_원본으로 조회
-    if match.empty:
-        match = df_rms[df_rms['종목코드_원본'].str.strip().str.upper() == ticker_clean]
-
-    # 3차: A 붙여서 원본 조회 (한국 6자리 숫자인 경우)
+    # 2차: A 붙여서 원본 조회 (한국 6자리 숫자인 경우)
     if match.empty and ticker_clean.isdigit() and len(ticker_clean) == 6:
         match = df_rms[df_rms['종목코드_원본'].str.strip().str.upper() == 'A' + ticker_clean]
 
