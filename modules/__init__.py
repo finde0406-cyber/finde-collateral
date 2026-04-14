@@ -13,6 +13,7 @@ from .rms_comparator import (
     parse_rms_excel,
     get_rms_status
 )
+from .dart_api import get_dart_analysis
 
 __all__ = [
     'fetch_korean_stock',
@@ -25,4 +26,5 @@ __all__ = [
     'export_to_excel',
     'parse_rms_excel',
     'get_rms_status',
+    'get_dart_analysis',
 ]
