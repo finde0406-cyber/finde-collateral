@@ -21,10 +21,10 @@ def validate_korean_stock_data(data):
 def validate_us_stock_data(data):
     """해외주식 데이터 검증"""
     if not data.get('success'):
-        return False, "조회 실패"
+        return False, data.get('error', '조회 실패')
     if data.get('price', 0) <= 0:
         return False, "주가 데이터 없음"
-    if data.get('high_52w', 0) <= 0 or data.get('low_52w', 0) <= 0:
+    if data.get('high_52w', 0) <= 0:
         return False, "52주 데이터 없음"
     return True, "정상"
 
