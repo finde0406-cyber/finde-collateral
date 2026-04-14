@@ -39,40 +39,25 @@ def render_rms_result(ticker: str, screen_eligible: bool):
 
     rms = get_rms_status(ticker, df_rms)
     if not rms['found']:
-        st.caption("ℹ️ RMS 미등록 종목")
+        st.info("ℹ️ RMS 미등록 종목")
         return
 
     rms_ok    = (rms['status'] == '정상')
     screen_ok = screen_eligible
 
-    if screen_ok and rms_ok:
-        rms_icon    = "🟢"
-        match_msg   = "✅ RMS 일치 — 정상"
-        match_color = "success"
-    elif not screen_ok and not rms_ok:
-        rms_icon    = "🔴"
-        match_msg   = "✅ RMS 일치 — 협의 불가"
-        match_color = "error"
-    elif not screen_ok and rms_ok:
-        rms_icon    = "🟢"
-        match_msg   = "🚨 RMS 불일치 — RMS 매수금지 재설정 검토 필요"
-        match_color = "error"
-    else:
-        rms_icon    = "🔴"
-        match_msg   = "⚠️ RMS 불일치 — RMS 매수가능 전환 검토 필요"
-        match_color = "warning"
-
-    st.markdown(
-        f"{rms_icon} **RMS 상태**: {rms['status']}"
+    rms_status_text = (
+        f"**RMS 상태**: {rms['status']}"
         + (f" ({rms['raw']})" if rms['raw'] else "")
     )
 
-    if match_color == "success":
-        st.success(match_msg)
-    elif match_color == "error":
-        st.error(match_msg)
+    if screen_ok and rms_ok:
+        st.success(f"🟢 {rms_status_text}\n\n✅ RMS 일치 — 정상")
+    elif not screen_ok and not rms_ok:
+        st.error(f"🔴 {rms_status_text}\n\n✅ RMS 일치 — 협의 불가")
+    elif not screen_ok and rms_ok:
+        st.error(f"🟢 {rms_status_text}\n\n🚨 불일치 — RMS 매수금지 재설정 검토 필요")
     else:
-        st.warning(match_msg)
+        st.warning(f"🔴 {rms_status_text}\n\n⚠️ 불일치 — RMS 매수가능 전환 검토 필요")
 
 
 # ═══════════════════════════════════════════════════════════
