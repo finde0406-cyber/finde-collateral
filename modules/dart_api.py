@@ -23,32 +23,41 @@ def is_available() -> bool:
 
 
 def fetch_corp_code(stock_code: str):
-    """종목코드 → DART 고유번호 조회 (전체 기업목록 다운로드 방식)"""
+    """종목코드 → DART 고유번호 조회 (로컬 캐시 방식)"""
     import zipfile
     import xml.etree.ElementTree as ET
     import io
+    import os
+
+    CORP_CODE_FILE = "data/corp_codes.xml"
+    code = str(stock_code).zfill(6)
 
     try:
-        code = str(stock_code).zfill(6)
-        res  = requests.get(
-            f"{BASE_URL}/corpCode.xml",
-            params={'crtfc_key': DART_API_KEY},
-            timeout=30
-        )
-        if res.status_code != 200:
-            return None
+        # 로컬 캐시 없으면 다운로드
+        if not os.path.exists(CORP_CODE_FILE):
+            os.makedirs("data", exist_ok=True)
+            res = requests.get(
+                f"{BASE_URL}/corpCode.xml",
+                params={'crtfc_key': DART_API_KEY},
+                timeout=30
+            )
+            if res.status_code != 200:
+                return None
+            with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+                xml_data = z.read('CORPCODE.xml')
+            with open(CORP_CODE_FILE, 'wb') as f:
+                f.write(xml_data)
+        else:
+            with open(CORP_CODE_FILE, 'rb') as f:
+                xml_data = f.read()
 
-        # ZIP 파일 압축 해제
-        with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-            xml_data = z.read('CORPCODE.xml')
-
-        # XML 파싱
         root = ET.fromstring(xml_data)
         for item in root.findall('list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
 
         return None
+
     except Exception:
         return None
 
