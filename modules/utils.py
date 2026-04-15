@@ -47,8 +47,12 @@ def save_screening_log(ticker, name, market_cap, volatility, judgment, acceptanc
             # 국내주식 종목코드 앞자리 0 유지
             ticker_str = str(ticker).zfill(6) if str(ticker).isdigit() else ticker
 
+            from datetime import timezone, timedelta
+            kst     = timezone(timedelta(hours=9))
+            now_kst = datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
+
             writer.writerow([
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                now_kst,
                 ticker_str,
                 name,
                 f"{market_cap:,.0f}" if market_cap else "N/A",
