@@ -61,7 +61,43 @@ def save_screening_log(ticker, name, market_cap, volatility, judgment, acceptanc
     except Exception:
         pass
 
+def export_to_excel(ticker, data, analysis):
+    """엑셀 내보내기"""
+    try:
+        is_korean = ticker.isdigit() and len(ticker) == 6
 
+        if is_korean:
+            df = pd.DataFrame({
+                '종목코드': [ticker],
+                '종목명': [data['name']],
+                '시장': [data['market']],
+                '업종': [data.get('sector', 'N/A')],
+                '시총(억)': [f"{data['market_cap']:,.0f}"],
+                '현재가': [f"{data['current_price']:,.0f}"],
+                '52주고가': [f"{data['high_52w']:,.0f}"],
+                '52주저가': [f"{data['low_52w']:,.0f}"],
+                '변동성(%)': [f"{analysis['volatility']:.1f}"],
+                '담보인정비율(%)': [analysis['acceptance_ratio']],
+                '판정': [analysis['judgment']],
+                '주요사유': [', '.join([v.replace('❌ ', '') for v in analysis['violations']]) if analysis['violations'] else '없음']
+            })
+        else:
+            df = pd.DataFrame({
+                '티커': [ticker],
+                '종목명': [data['name']],
+                '거래소': [data['exchange']],
+                '시총($B)': [f"{data['mcap']:.2f}"],
+                '현재가($)': [f"{data['price']:.2f}"],
+                '변동성(%)': [f"{analysis['volatility']:.1f}"],
+                '담보인정비율(%)': [analysis['acceptance_ratio']],
+                '판정': [analysis['judgment']]
+            })
+
+        filename = f"심사_{ticker}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        df.to_excel(filename, index=False, engine='openpyxl')
+        return filename
+    except Exception:
+        return None
 def load_screening_history() -> pd.DataFrame:
     """심사 이력 로드"""
     if not os.path.exists(LOG_FILE):
