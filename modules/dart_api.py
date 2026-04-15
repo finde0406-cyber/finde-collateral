@@ -175,34 +175,40 @@ def fetch_risk_disclosures(corp_code: str) -> list:
 
 def get_dart_analysis(stock_code: str) -> dict:
     """메인 함수 — DART 전체 분석"""
+    empty = {
+        'available'       : True,
+        'corp_code'       : None,
+        'error'           : 'DART 조회 실패',
+        'financial'       : [],
+        'audit'           : {},
+        'risk_disclosures': []
+    }
+
     if not is_available():
         return {'available': False, 'error': 'API Key 미설정'}
 
-    corp_code = fetch_corp_code(stock_code)
-    if not corp_code:
+    try:
+        corp_code = fetch_corp_code(stock_code)
+        if not corp_code:
+            return {**empty, 'error': '기업 정보 없음'}
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            f_financial = executor.submit(fetch_financial_data, corp_code)
+            f_audit     = executor.submit(fetch_audit_opinion, corp_code)
+            f_risk      = executor.submit(fetch_risk_disclosures, corp_code)
+
+            financial        = f_financial.result(timeout=10)
+            audit            = f_audit.result(timeout=10)
+            risk_disclosures = f_risk.result(timeout=10)
+
         return {
             'available'       : True,
-            'corp_code'       : None,
-            'error'           : '기업 정보 없음',
-            'financial'       : [],
-            'audit'           : {},
-            'risk_disclosures': []
+            'corp_code'       : corp_code,
+            'financial'       : financial,
+            'audit'           : audit,
+            'risk_disclosures': risk_disclosures,
+            'error'           : None
         }
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        f_financial = executor.submit(fetch_financial_data, corp_code)
-        f_audit     = executor.submit(fetch_audit_opinion, corp_code)
-        f_risk      = executor.submit(fetch_risk_disclosures, corp_code)
-
-        financial        = f_financial.result()
-        audit            = f_audit.result()
-        risk_disclosures = f_risk.result()
-
-    return {
-        'available'       : True,
-        'corp_code'       : corp_code,
-        'financial'       : financial,
-        'audit'           : audit,
-        'risk_disclosures': risk_disclosures,
-        'error'           : None
-    }
+    except Exception:
+        return empty
