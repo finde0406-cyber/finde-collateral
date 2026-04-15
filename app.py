@@ -399,16 +399,19 @@ with tab1:
         ticker = ticker.strip()
 
         # 숫자 6자리가 아닌 경우 종목명으로 검색 시도
-        if not (ticker.isdigit() and len(ticker) == 6):
+        # 6자리 코드(숫자 또는 숫자+영문)가 아닌 경우 종목명으로 검색 시도
+        is_korean_code = len(ticker) == 6 and ticker.isalnum()
+        if not is_korean_code:
             found_ticker = find_ticker_by_name(ticker)
             if found_ticker:
                 ticker = found_ticker
+                is_korean_code = True
             else:
                 st.error(f"❌ '{ticker}' 종목을 찾을 수 없습니다. 종목코드로 검색해주세요.")
                 ticker = ""
 
         if ticker:
-            is_korean = ticker.isdigit() and len(ticker) == 6
+            is_korean = is_korean_code
 
             if is_korean:
                 # ── 국내주식 ──────────────────────────────────
