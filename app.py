@@ -664,6 +664,9 @@ with tab2:
         display_cols = ['일시', '종목코드', '종목명', '시총', '변동성', '판정', '담보인정비율', '주요사유']
         df_display = df_filtered[display_cols].copy()
         df_display['일시'] = df_display['일시'].dt.strftime('%Y-%m-%d %H:%M')
+        df_display['변동성'] = df_display['변동성'].apply(
+            lambda x: f"{float(x):.1f}%" if x != 'N/A' else x
+        )
 
         st.dataframe(
             df_display.style.applymap(highlight_judgment, subset=['판정']),
