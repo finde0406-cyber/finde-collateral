@@ -16,12 +16,8 @@ def validate_korean_stock_data(data):
     """국내주식 데이터 검증"""
     if not data.get('success'):
         return False, "조회 실패"
-    if data.get('market_cap', 0) <= 0:
-        return False, "시총 데이터 없음"
     if data.get('current_price', 0) <= 0:
         return False, "주가 데이터 없음"
-    if data.get('high_52w', 0) <= 0 or data.get('low_52w', 0) <= 0:
-        return False, "52주 데이터 없음"
     return True, "정상"
 
 
