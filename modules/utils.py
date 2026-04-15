@@ -44,9 +44,12 @@ def save_screening_log(ticker, name, market_cap, volatility, judgment, acceptanc
             writer = csv.writer(f)
             if write_header:
                 writer.writerow(LOG_HEADER)
+            # 국내주식 종목코드 앞자리 0 유지
+            ticker_str = str(ticker).zfill(6) if str(ticker).isdigit() else ticker
+
             writer.writerow([
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                ticker,
+                ticker_str,
                 name,
                 f"{market_cap:,.0f}" if market_cap else "N/A",
                 f"{volatility:.1f}" if volatility else "N/A",
