@@ -74,8 +74,10 @@ def load_rms_from_server() -> tuple:
             with open(META_FILE, 'r', encoding='utf-8') as f:
                 meta = json.load(f)
         else:
+            from datetime import timezone, timedelta
+            kst   = timezone(timedelta(hours=9))
             mtime = os.path.getmtime(RMS_FILE)
-            dt    = datetime.fromtimestamp(mtime)
+            dt    = datetime.fromtimestamp(mtime, tz=kst)
             meta  = {
                 'filename'    : 'rms_latest.xlsx',
                 'uploaded_at' : dt.strftime('%Y-%m-%d %H:%M'),
