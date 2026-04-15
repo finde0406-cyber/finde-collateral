@@ -20,10 +20,10 @@ def get_finnhub_client():
 
 
 def find_ticker_by_name(name: str):
-    """종목명으로 종목코드 검색"""
     try:
         df_krx = fdr.StockListing('KRX')
-        match  = df_krx[df_krx['Name'] == name.strip()]
+        name_clean = name.strip().upper()
+        match = df_krx[df_krx['Name'].str.upper() == name_clean]
         if not match.empty:
             return match.iloc[0]['Code']
         return None
