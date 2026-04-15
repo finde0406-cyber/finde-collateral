@@ -35,7 +35,7 @@ def fetch_korean_stock(ticker):
     """국내주식 데이터 수집"""
     try:
         df_krx     = fdr.StockListing('KRX')
-        stock_info = df_krx[df_krx['Code'] == ticker]
+        stock_info = df_krx[df_krx['Code'].str.upper() == ticker.upper()]
 
         if not stock_info.empty:
             df_price = fdr.DataReader(ticker, '2024-01-01')
