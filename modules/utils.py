@@ -15,9 +15,7 @@ LOG_HEADER = ['일시', '종목코드', '종목명', '시총', '변동성', '판
 def validate_korean_stock_data(data):
     """국내주식 데이터 검증"""
     if not data.get('success'):
-        return False, "조회 실패"
-    if data.get('current_price', 0) <= 0:
-        return False, "주가 데이터 없음"
+        return False, data.get('error', '조회 실패')
     return True, "정상"
 
 
