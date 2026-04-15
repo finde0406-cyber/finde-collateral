@@ -398,8 +398,8 @@ with tab1:
     if search_button and ticker:
         ticker = ticker.strip()
 
-        # 한글 종목명 입력 시 코드로 변환
-        if any('\uAC00' <= c <= '\uD7A3' for c in ticker):
+        # 숫자 6자리가 아닌 경우 종목명으로 검색 시도
+        if not (ticker.isdigit() and len(ticker) == 6):
             found_ticker = find_ticker_by_name(ticker)
             if found_ticker:
                 ticker = found_ticker
