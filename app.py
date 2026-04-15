@@ -409,7 +409,6 @@ with tab1:
                 is_korean = True
             else:
                 st.error(f"❌ '{ticker}' 종목을 찾을 수 없습니다. 종목코드로 검색해주세요.")
-                st.stop()
 
         is_korean = ticker.isdigit() and len(ticker) == 6
 
@@ -422,7 +421,6 @@ with tab1:
                     if not is_valid:
                         st.error(f"❌ {message}")
                         st.info("💡 잠시 후 다시 시도하거나 관리자에게 문의하세요")
-                        st.stop()
 
                     dart_data = get_dart_analysis(ticker)
                     analysis  = analyze_korean_stock(data, dart_data)
@@ -508,7 +506,6 @@ with tab1:
                     if not is_valid:
                         st.error(f"❌ {message}")
                         st.info("💡 잠시 후 다시 시도하거나 관리자에게 문의하세요")
-                        st.stop()
 
                     analysis = analyze_us_stock(data)
 
