@@ -402,18 +402,11 @@ with tab1:
         # 6자리 코드(숫자 또는 숫자+영문)가 아닌 경우 종목명으로 검색 시도
         is_korean_code = len(ticker) == 6 and ticker.isalnum()
         if not is_korean_code:
-            # 순수 영문만이고 6자리 미만이면 해외주식 티커로 바로 처리
-            if ticker.replace('.', '').replace('-', '').isascii() and ticker.replace('.', '').replace('-', '').isalpha():
-                pass  # 해외주식으로 처리
-            else:
-                # 한글, 한글+영문, HLB 같은 국내 종목명 검색
-                found_ticker = find_ticker_by_name(ticker)
-                if found_ticker:
-                    ticker = found_ticker
-                    is_korean_code = True
-                else:
-                    st.error(f"❌ '{ticker}' 종목을 찾을 수 없습니다. 종목코드로 검색해주세요.")
-                    ticker = ""
+            found_ticker = find_ticker_by_name(ticker)
+            if found_ticker:
+                ticker = found_ticker
+                is_korean_code = True
+            # KRX에서 못찾으면 해외주식으로 처리
 
         if ticker:
             is_korean = is_korean_code
