@@ -104,7 +104,7 @@ def load_screening_history() -> pd.DataFrame:
     if not os.path.exists(LOG_FILE):
         return pd.DataFrame(columns=LOG_HEADER)
     try:
-        df = pd.read_csv(LOG_FILE, encoding='utf-8-sig')
+        df = pd.read_csv(LOG_FILE, encoding='utf-8-sig', dtype={'종목코드': str})
         df['일시'] = pd.to_datetime(df['일시'])
         return df
     except Exception:
