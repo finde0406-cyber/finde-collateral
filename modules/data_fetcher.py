@@ -11,34 +11,30 @@ from config import FINNHUB_API_KEY
 
 # Finnhub 클라이언트 초기화
 _finnhub_client = None
-# KRX 종목 리스트 캐시
-_krx_listing = None
 
-def get_krx_listing():
-    global _krx_listing
-    if _krx_listing is None:
-        _krx_listing = fdr.StockListing('KRX')
-    return _krx_listing
-    
 def get_finnhub_client():
     global _finnhub_client
     if _finnhub_client is None:
         _finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
     return _finnhub_client
 
+
 def find_ticker_by_name(name: str):
+    """종목명으로 종목코드 검색"""
     try:
-        df_krx = get_krx_listing()
+        df_krx = fdr.StockListing('KRX')
         match  = df_krx[df_krx['Name'] == name.strip()]
         if not match.empty:
             return match.iloc[0]['Code']
         return None
     except Exception:
         return None
+
+
 def fetch_korean_stock(ticker):
     """국내주식 데이터 수집"""
     try:
-        df_krx     = get_krx_listing()
+        df_krx     = fdr.StockListing('KRX')
         stock_info = df_krx[df_krx['Code'] == ticker]
 
         if not stock_info.empty:
@@ -109,7 +105,6 @@ ETF_KEYWORDS = [
     'ISHARES', 'INVESCO', 'SPDR', 'VANGUARD', 'SCHWAB'
 ]
 
-
 # 알려진 ETF/ETP 티커 목록 (레버리지 포함)
 KNOWN_ETF_TICKERS = {
     'SOXL', 'SOXS', 'TQQQ', 'SQQQ', 'UPRO', 'SPXU', 'UVXY', 'SVXY',
@@ -124,22 +119,17 @@ def _is_etf(symbol: str, industry: str) -> bool:
     """ETF 여부 판별"""
     s = symbol.upper()
     i = industry.upper() if industry else ''
-    # 알려진 ETF 티커 직접 체크
     if s in KNOWN_ETF_TICKERS:
         return True
     return any(kw in s or kw in i for kw in ETF_KEYWORDS)
 
 
 def fetch_us_stock(ticker):
-    """
-    해외주식 데이터 수집 (Finnhub 기반)
-    프로필 없는 ETF도 시세+재무지표로 처리
-    """
+    """해외주식 데이터 수집 (Finnhub 기반)"""
     try:
         client = get_finnhub_client()
         symbol = ticker.strip().upper()
 
-        # ── 1. 시세 조회 (가장 먼저 — 종목 존재 여부 확인) ───
         quote = client.quote(symbol)
         if not quote or quote.get('c', 0) == 0:
             return {'success': False, 'error': '종목 정보 없음 (시세 조회 실패)'}
@@ -148,7 +138,6 @@ def fetch_us_stock(ticker):
         high_day      = quote.get('h', 0)
         low_day       = quote.get('l', 0)
 
-        # ── 2. 기업 프로필 (없어도 계속 진행) ────────────────
         try:
             profile = client.company_profile2(symbol=symbol)
         except Exception:
@@ -162,7 +151,6 @@ def fetch_us_stock(ticker):
         quote_type = 'ETF' if _is_etf(symbol, industry) else 'EQUITY'
         mcap_label = 'AUM' if quote_type == 'ETF' else '시총'
 
-        # ── 3. 재무 지표 ──────────────────────────────────────
         try:
             metrics_data = client.company_basic_financials(symbol, 'all')
             metrics      = metrics_data.get('metric', {}) if metrics_data else {}
@@ -175,17 +163,17 @@ def fetch_us_stock(ticker):
             operating_margins = metrics.get('operatingMarginAnnual')
             revenue_growth    = metrics.get('revenueGrowthAnnual') or metrics.get('revenueGrowth3Y')
             beta              = metrics.get('beta')
-            market_cap_m = metrics.get('marketCapitalization')  # $M 단위
+            market_cap_m      = metrics.get('marketCapitalization')
 
-            # ETF는 AUM 별도 조회
             if quote_type == 'ETF' and not market_cap_m:
                 try:
                     etf_profile = client.etf_profile(symbol)
                     if etf_profile and etf_profile.get('aum'):
-                        market_cap_m = etf_profile['aum'] / 1000000  # $ → $M
+                        market_cap_m = etf_profile['aum'] / 1000000
                 except Exception:
                     pass
-            volume_m          = metrics.get('10DayAverageTradingVolume')  # M 단위
+
+            volume_m = metrics.get('10DayAverageTradingVolume')
 
         except Exception:
             high_52w          = high_day
@@ -199,11 +187,9 @@ def fetch_us_stock(ticker):
             market_cap_m      = None
             volume_m          = None
 
-        # 단위 변환
         mcap_b = (market_cap_m / 1000) if market_cap_m else 0
         volume = int(volume_m * 1000000) if volume_m else 0
 
-        # ROE, 영업이익률: Finnhub은 % 단위 → 소수점으로 변환
         roe_decimal    = (return_on_equity  / 100) if return_on_equity  is not None else None
         op_mar_decimal = (operating_margins / 100) if operating_margins is not None else None
 
@@ -221,7 +207,6 @@ def fetch_us_stock(ticker):
             'industry'         : industry,
             'beta'             : beta if beta else 0,
             'volume'           : volume,
-            # 재무 데이터
             'debt_to_equity'   : debt_to_equity,
             'return_on_equity' : roe_decimal,
             'current_ratio'    : current_ratio,
