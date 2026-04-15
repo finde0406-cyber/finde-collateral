@@ -4,12 +4,17 @@ DART API 연동
 - 감사의견
 - 위험 공시 탐지
 """
+import os
+import io
+import zipfile
+import xml.etree.ElementTree as ET
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from config import DART_API_KEY
 
-BASE_URL = "https://opendart.fss.or.kr/api"
+BASE_URL       = "https://opendart.fss.or.kr/api"
+CORP_CODE_FILE = "data/corp_codes.xml"
 
 RISK_KEYWORDS = [
     '관리종목', '상장폐지', '거래정지', '횡령', '배임',
@@ -24,12 +29,6 @@ def is_available() -> bool:
 
 def fetch_corp_code(stock_code: str):
     """종목코드 → DART 고유번호 조회 (로컬 캐시 방식)"""
-    import zipfile
-    import xml.etree.ElementTree as ET
-    import io
-    import os
-
-    CORP_CODE_FILE = "data/corp_codes.xml"
     code = str(stock_code).zfill(6)
 
     try:
@@ -51,8 +50,9 @@ def fetch_corp_code(stock_code: str):
             with open(CORP_CODE_FILE, 'rb') as f:
                 xml_data = f.read()
 
+        # .//list 로 XML 전체에서 list 태그 검색
         root = ET.fromstring(xml_data)
-        for item in root.findall('list'):
+        for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
 
