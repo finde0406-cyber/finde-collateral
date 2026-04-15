@@ -11,7 +11,15 @@ from config import FINNHUB_API_KEY
 
 # Finnhub 클라이언트 초기화
 _finnhub_client = None
+# KRX 종목 리스트 캐시
+_krx_listing = None
 
+def get_krx_listing():
+    global _krx_listing
+    if _krx_listing is None:
+        _krx_listing = fdr.StockListing('KRX')
+    return _krx_listing
+    
 def get_finnhub_client():
     global _finnhub_client
     if _finnhub_client is None:
@@ -19,9 +27,8 @@ def get_finnhub_client():
     return _finnhub_client
 
 def find_ticker_by_name(name: str):
-    """종목명으로 종목코드 검색"""
     try:
-        df_krx = fdr.StockListing('KRX')
+        df_krx = get_krx_listing()
         match  = df_krx[df_krx['Name'] == name.strip()]
         if not match.empty:
             return match.iloc[0]['Code']
@@ -31,7 +38,7 @@ def find_ticker_by_name(name: str):
 def fetch_korean_stock(ticker):
     """국내주식 데이터 수집"""
     try:
-        df_krx     = fdr.StockListing('KRX')
+        df_krx     = get_krx_listing()
         stock_info = df_krx[df_krx['Code'] == ticker]
 
         if not stock_info.empty:
