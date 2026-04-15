@@ -425,7 +425,6 @@ with tab1:
                             st.info("💡 잠시 후 다시 시도하거나 관리자에게 문의하세요")
                         else:
                             dart_data = get_dart_analysis(ticker)
-                            st.write("DART:", dart_data.get('corp_code'), dart_data.get('error'), len(dart_data.get('financial', [])))
                             analysis  = analyze_korean_stock(data, dart_data)
 
                             save_screening_log(
