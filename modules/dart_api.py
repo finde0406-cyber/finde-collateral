@@ -11,7 +11,6 @@ from config import DART_API_KEY
 
 BASE_URL      = "https://opendart.fss.or.kr/api"
 _xml_cache    = None  # corpCode.xml 메모리 캐시
-
 RISK_KEYWORDS = [
     '관리종목', '상장폐지', '거래정지', '횡령', '배임',
     '감자', '워크아웃', '법정관리', '회생', '부도',
