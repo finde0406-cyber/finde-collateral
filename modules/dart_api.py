@@ -10,7 +10,7 @@ from datetime import datetime
 from config import DART_API_KEY
 
 BASE_URL      = "https://opendart.fss.or.kr/api"
-_xml_cache    = None  # corpCode.xml 메모리 캐시
+_CORPCODE_FILE = "/tmp/dart_corpcode.xml"
 RISK_KEYWORDS = [
     '관리종목', '상장폐지', '거래정지', '횡령', '배임',
     '감자', '워크아웃', '법정관리', '회생', '부도',
@@ -23,17 +23,17 @@ def is_available() -> bool:
 
 
 def fetch_corp_code(stock_code: str):
-    """종목코드 → DART 고유번호 조회 (메모리 캐시 방식)"""
+    """종목코드 → DART 고유번호 조회 (파일 캐시 방식)"""
     import zipfile
     import xml.etree.ElementTree as ET
     import io
-
-    global _xml_cache
+    import os
 
     code = str(stock_code).zfill(6)
 
     try:
-        if _xml_cache is None:
+        # 파일 없을 때만 다운로드
+        if not os.path.exists(_CORPCODE_FILE):
             res = requests.get(
                 f"{BASE_URL}/corpCode.xml",
                 params={'crtfc_key': DART_API_KEY},
@@ -42,9 +42,14 @@ def fetch_corp_code(stock_code: str):
             if res.status_code != 200:
                 return None
             with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                _xml_cache = z.read('CORPCODE.xml')
+                xml_bytes = z.read('CORPCODE.xml')
+            with open(_CORPCODE_FILE, 'wb') as f:
+                f.write(xml_bytes)
 
-        root = ET.fromstring(_xml_cache)
+        with open(_CORPCODE_FILE, 'rb') as f:
+            xml_bytes = f.read()
+
+        root = ET.fromstring(xml_bytes)
         for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
@@ -52,7 +57,11 @@ def fetch_corp_code(stock_code: str):
         return None
 
     except Exception:
-        _xml_cache = None
+        # 파일 손상 시 삭제 후 다음 번에 재다운로드
+        try:
+            os.remove(_CORPCODE_FILE)
+        except Exception:
+            pass
         return None
 
 
