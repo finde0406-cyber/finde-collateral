@@ -82,7 +82,7 @@ def fetch_financial_year(corp_code: str, year: int):
 
             items = data.get('list', [])
             row   = {'year': year, 'equity': None, 'debt': None,
-                     'capital': None, 'revenue': None, 'op_income': None}
+                     'revenue': None, 'op_income': None}
 
             for item in items:
                 account    = item.get('account_nm', '')
@@ -92,9 +92,7 @@ def fetch_financial_year(corp_code: str, year: int):
                 except ValueError:
                     amount = None
 
-                if account == '자본금':
-                    row['capital'] = amount
-                elif '자본총계' in account:
+                if '자본총계' in account:
                     row['equity'] = amount
                 elif '부채총계' in account:
                     row['debt'] = amount
