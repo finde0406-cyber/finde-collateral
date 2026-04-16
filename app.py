@@ -124,7 +124,7 @@ def render_dart_summary(dart_summary: dict):
         elif erosion >= 30:
             col1.metric("자본잠식률", f"{erosion:.1f}%", delta="주의", delta_color="inverse")
         else:
-            col1.metric("자본잠식률", "정상", delta="양호", delta_color="normal")
+            col1.metric("자본잠식률", f"{erosion:.1f}%", delta="정상", delta_color="normal")
     elif dart_summary.get('equity') is not None and dart_summary['equity'] <= 0:
         col1.metric("자본잠식률", "완전잠식", delta="위험", delta_color="inverse")
     else:
