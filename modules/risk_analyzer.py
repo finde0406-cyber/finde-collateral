@@ -67,15 +67,14 @@ def analyze_dart_data(dart_data: dict) -> tuple:
                     f"❌ 완전자본잠식 ({year}년 자본총계 {equity/100000000:,.0f}억)"
                 )
                 risk_factors.append("상장폐지 실질심사 대상 가능")
-        
             elif capital is not None and capital > 0:
                 erosion_rate = (capital - equity) / capital * 100
                 dart_summary['erosion_rate'] = erosion_rate
                 if erosion_rate >= 50:
-                        violations.append(
-                            f"❌ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 관리종목 기준 초과"
-                        )
-                        risk_factors.append("자본잠식 50% 이상 — 관리종목 지정 가능")
+                    violations.append(
+                        f"❌ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 관리종목 기준 초과"
+                    )
+                    risk_factors.append("자본잠식 50% 이상 — 관리종목 지정 가능")
                 elif erosion_rate >= 30:
                     risk_factors.append(
                         f"⚠️ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 주의 필요"
