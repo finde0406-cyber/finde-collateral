@@ -46,37 +46,48 @@ def analyze_dart_data(dart_data: dict) -> tuple:
 
     financial = dart_data.get('financial', [])
     if financial:
-        latest    = financial[0]
-        equity    = latest.get('equity')
-        debt      = latest.get('debt')
-        year      = latest.get('year')
+        latest  = financial[0]
+        equity  = latest.get('equity')
+        debt    = latest.get('debt')
+        capital = latest.get('capital')   # 자본금 (납입자본금)
+        year    = latest.get('year')
 
         dart_summary['latest_year'] = year
 
         if equity is not None and debt is not None:
-            total_assets = equity + debt
-            dart_summary['equity']       = equity
-            dart_summary['debt']         = debt
-            dart_summary['total_assets'] = total_assets
+            dart_summary['equity'] = equity
+            dart_summary['debt']   = debt
 
+            # ── 자본잠식률 계산 ─────────────────────────────────
+            # 공식: (자본금 - 자본총계) / 자본금 × 100
+            # 자본금(capital): 납입자본금
+            # 자본총계(equity): 자본금 + 자본잉여금 + 이익잉여금 등
             if equity <= 0:
-                violations.append(f"❌ 완전자본잠식 ({year}년 자본총계 {equity/100000000:,.0f}억)")
+                violations.append(
+                    f"❌ 완전자본잠식 ({year}년 자본총계 {equity/100000000:,.0f}억)"
+                )
                 risk_factors.append("상장폐지 실질심사 대상 가능")
-            elif total_assets > 0:
-                erosion_rate = (1 - equity / total_assets) * 100
+            elif capital is not None and capital > 0:
+                erosion_rate = (capital - equity) / capital * 100
                 dart_summary['erosion_rate'] = erosion_rate
                 if erosion_rate >= 50:
-                    violations.append(f"❌ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 관리종목 기준 초과")
+                    violations.append(
+                        f"❌ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 관리종목 기준 초과"
+                    )
                     risk_factors.append("자본잠식 50% 이상 — 관리종목 지정 가능")
                 elif erosion_rate >= 30:
-                    risk_factors.append(f"⚠️ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 주의 필요")
+                    risk_factors.append(
+                        f"⚠️ 자본잠식률 {erosion_rate:.1f}% ({year}년) — 주의 필요"
+                    )
 
+            # ── 부채비율 ────────────────────────────────────────
             if equity > 0:
                 debt_ratio = (debt / equity) * 100
                 dart_summary['debt_ratio'] = debt_ratio
                 if debt_ratio >= 300:
                     risk_factors.append(f"⚠️ 부채비율 {debt_ratio:.0f}% ({year}년) — 재무 위험")
 
+        # ── 연속 영업손실 ────────────────────────────────────────
         if len(financial) >= 2:
             loss_years = [f['year'] for f in financial
                           if f.get('op_income') is not None and f['op_income'] < 0]
@@ -87,6 +98,7 @@ def analyze_dart_data(dart_data: dict) -> tuple:
             elif len(loss_years) == 2:
                 risk_factors.append(f"⚠️ 2년 연속 영업손실 ({', '.join(map(str, loss_years))})")
 
+        # ── 매출 급감 ────────────────────────────────────────────
         if len(financial) >= 2:
             rev_latest = financial[0].get('revenue')
             rev_prev   = financial[1].get('revenue')
@@ -104,6 +116,7 @@ def analyze_dart_data(dart_data: dict) -> tuple:
                         f"({financial[1]['year']}→{financial[0]['year']})"
                     )
 
+    # ── 감사의견 ─────────────────────────────────────────────────
     audit      = dart_data.get('audit', {})
     opinion    = audit.get('opinion', '')
     audit_year = audit.get('year', '')
@@ -117,6 +130,7 @@ def analyze_dart_data(dart_data: dict) -> tuple:
         elif '한정' in opinion:
             risk_factors.append(f"⚠️ 감사의견 '한정' ({audit_year}년) — 재무 신뢰성 주의")
 
+    # ── 위험 공시 ────────────────────────────────────────────────
     risk_disclosures = dart_data.get('risk_disclosures', [])
     if risk_disclosures:
         dart_summary['risk_disclosures'] = risk_disclosures
@@ -354,7 +368,6 @@ def analyze_us_stock(data):
 
     min_mcap = US_STOCK['min_market_cap']
     if quote_type == "ETF":
-        # ETF는 AUM 확인된 경우만 소규모 체크, 0이면 조회실패로 간주하고 통과
         if mcap > 0 and mcap < 0.1:
             violations.append("❌ 소규모 ETF (AUM $0.1B 미만)")
     else:
@@ -373,7 +386,6 @@ def analyze_us_stock(data):
     limits = US_STOCK['volatility_limits']
 
     if quote_type == 'ETF':
-        # ETF는 시총 미조회 시 대형으로 기본 처리
         if mcap >= 10:
             cap_category     = "대형 ETF"
             volatility_limit = limits['large']
@@ -382,7 +394,7 @@ def analyze_us_stock(data):
             volatility_limit = limits['mid']
         else:
             cap_category     = "ETF"
-            volatility_limit = limits['large']  # AUM 미확인 시 대형 기준 적용
+            volatility_limit = limits['large']
     elif mcap >= 50:
         cap_category     = "초대형주"
         volatility_limit = limits['mega']
@@ -418,7 +430,6 @@ def analyze_us_stock(data):
         else:
             risk_factors.append("저점권 — 추가 하락 가능")
 
-    # ── 해외 재무 분석 ──────────────────────────────────────
     fin_violations, fin_risks, financial_summary = analyze_us_financial(data)
     violations   += fin_violations
     risk_factors += fin_risks
