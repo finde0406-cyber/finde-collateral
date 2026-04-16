@@ -400,7 +400,7 @@ with tab1:
 
         # 숫자 6자리가 아닌 경우 종목명으로 검색 시도
         # 6자리 코드(숫자 또는 숫자+영문)가 아닌 경우 종목명으로 검색 시도
-        is_korean_code = len(ticker) == 6 and ticker.isalnum()
+        is_korean_code = len(ticker) == 6 and ticker.isascii() and ticker.isalnum()
         if not is_korean_code:
             found_ticker = find_ticker_by_name(ticker)
             if found_ticker:
