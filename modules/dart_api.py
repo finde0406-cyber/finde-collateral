@@ -7,10 +7,11 @@ DART API 연동
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import lru_cache
 from config import DART_API_KEY
 
 BASE_URL      = "https://opendart.fss.or.kr/api"
-_xml_cache = None  # corpCode.xml 메모리 캐시
+
 RISK_KEYWORDS = [
     '관리종목', '상장폐지', '거래정지', '횡령', '배임',
     '감자', '워크아웃', '법정관리', '회생', '부도',
@@ -22,35 +23,33 @@ def is_available() -> bool:
     return DART_API_KEY is not None and DART_API_KEY != ""
 
 
+@lru_cache(maxsize=1)
+def _load_corpcode_xml() -> bytes:
+    import zipfile, io
+    res = requests.get(
+        f"{BASE_URL}/corpCode.xml",
+        params={'crtfc_key': DART_API_KEY},
+        timeout=30
+    )
+    if res.status_code != 200:
+        return None
+    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+        return z.read('CORPCODE.xml')
+
+
 def fetch_corp_code(stock_code: str):
-    import zipfile
     import xml.etree.ElementTree as ET
-    import io
-
-    global _xml_cache
     code = str(stock_code).zfill(6)
-
     try:
-        if _xml_cache is None:
-            res = requests.get(
-                f"{BASE_URL}/corpCode.xml",
-                params={'crtfc_key': DART_API_KEY},
-                timeout=30
-            )
-            if res.status_code != 200:
-                return None
-            with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                _xml_cache = z.read('CORPCODE.xml')
-
-        root = ET.fromstring(_xml_cache)
+        xml_bytes = _load_corpcode_xml()
+        if xml_bytes is None:
+            return None
+        root = ET.fromstring(xml_bytes)
         for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
         return None
-
     except Exception:
-        _xml_cache = None
-        return None
         return None
 
 
