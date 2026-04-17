@@ -7,10 +7,10 @@ DART API 연동
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import lru_cache
 from config import DART_API_KEY
 
 BASE_URL      = "https://opendart.fss.or.kr/api"
-_xml_cache    = None  # corpCode.xml 메모리 캐시
 RISK_KEYWORDS = [
     '관리종목', '상장폐지', '거래정지', '횡령', '배임',
     '감자', '워크아웃', '법정관리', '회생', '부도',
@@ -22,56 +22,36 @@ def is_available() -> bool:
     return DART_API_KEY is not None and DART_API_KEY != ""
 
 
+@lru_cache(maxsize=1)
+def _load_corpcode_xml() -> bytes:
+    import zipfile, io
+    res = requests.get(
+        f"{BASE_URL}/corpCode.xml",
+        params={'crtfc_key': DART_API_KEY},
+        timeout=30
+    )
+    if res.status_code != 200:
+        raise Exception("CORPCODE 다운로드 실패")
+    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+        return z.read('CORPCODE.xml')
+
+
 def fetch_corp_code(stock_code: str):
-    import zipfile
     import xml.etree.ElementTree as ET
-    import io
-
-    global _xml_cache
     code = str(stock_code).zfill(6)
-
     try:
-        if _xml_cache is None:
-            res = requests.get(
-                f"{BASE_URL}/corpCode.xml",
-                params={'crtfc_key': DART_API_KEY},
-                timeout=30
-            )
-            if res.status_code != 200:
-                return None
-            # ZIP이면 압축 해제, 아니면 직접 사용
-            try:
-                with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                    _xml_cache = z.read('CORPCODE.xml')
-            except zipfile.BadZipFile:
-                _xml_cache = res.content
-
-        root = ET.fromstring(_xml_cache)
-        import streamlit as st
-        # XML 구조 확인
-        first = root.findall('.//list')
-        if first:
-            st.info(f"XML 첫번째 항목: {list(first[0])}, 태그들: {[c.tag for c in first[0]]}")
-        else:
-            all_tags = list(set([c.tag for c in root.iter()]))
-            message = root.findtext('message', '')
-            status = root.findtext('status', '')
-            st.info(f"list 없음. status: {status}, message: {message}")
+        xml_bytes = _load_corpcode_xml()
+        root = ET.fromstring(xml_bytes)
         for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
-        import streamlit as st
-        st.info(f"corp_code 검색 결과: {code} → 없음")
+        return None
+    except Exception:
+        _load_corpcode_xml.cache_clear()
         return None
 
-    except Exception as e:
-        _xml_cache = None
-        import streamlit as st
-        st.error(f"DART 에러: {str(e)}")
-        return None
 
 def fetch_financial_year(corp_code: str, year: int):
-    """특정 연도 재무데이터 조회"""
     for fs_div in ['CFS', 'OFS']:
         try:
             res  = requests.get(
@@ -83,12 +63,10 @@ def fetch_financial_year(corp_code: str, year: int):
                     'reprt_code': '11011',
                     'fs_div'    : fs_div,
                 },
-                timeout=5
+                timeout=10
             )
             data = res.json()
             if data.get('status') != '000':
-                import streamlit as st
-                st.warning(f"DART 재무 응답: {data.get('status')} / {data.get('message')}")
                 continue
 
             items = data.get('list', [])
@@ -116,15 +94,12 @@ def fetch_financial_year(corp_code: str, year: int):
 
             if any(v is not None for v in [row['equity'], row['debt']]):
                 return row
-        except Exception as e:
-            import streamlit as st
-            st.error(f"재무데이터 에러: {str(e)}")
+        except Exception:
             continue
     return None
 
 
 def fetch_financial_data(corp_code: str) -> list:
-    """최근 2년 재무데이터 병렬 조회"""
     current_year = datetime.now().year
     years        = [current_year - 1, current_year - 2]
 
@@ -140,7 +115,6 @@ def fetch_financial_data(corp_code: str) -> list:
 
 
 def fetch_audit_opinion(corp_code: str) -> dict:
-    """최근 감사의견 조회"""
     try:
         res  = requests.get(
             f"{BASE_URL}/list.json",
@@ -179,7 +153,6 @@ def fetch_audit_opinion(corp_code: str) -> dict:
 
 
 def fetch_risk_disclosures(corp_code: str) -> list:
-    """최근 1년 위험 공시 탐지"""
     try:
         today  = datetime.now()
         bgn_de = f"{today.year - 1}{today.month:02d}{today.day:02d}"
@@ -211,7 +184,6 @@ def fetch_risk_disclosures(corp_code: str) -> list:
 
 
 def get_dart_analysis(stock_code: str) -> dict:
-    """메인 함수 — DART 전체 분석"""
     empty = {
         'available'       : True,
         'corp_code'       : None,
@@ -234,9 +206,9 @@ def get_dart_analysis(stock_code: str) -> dict:
             f_audit     = executor.submit(fetch_audit_opinion, corp_code)
             f_risk      = executor.submit(fetch_risk_disclosures, corp_code)
 
-            financial        = f_financial.result(timeout=10)
-            audit            = f_audit.result(timeout=10)
-            risk_disclosures = f_risk.result(timeout=10)
+            financial        = f_financial.result(timeout=15)
+            audit            = f_audit.result(timeout=15)
+            risk_disclosures = f_risk.result(timeout=15)
 
         return {
             'available'       : True,
