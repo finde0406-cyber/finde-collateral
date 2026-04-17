@@ -199,6 +199,10 @@ def get_dart_analysis(stock_code: str) -> dict:
     try:
         corp_code = fetch_corp_code(stock_code)
         if not corp_code:
+            # 첫 시도 실패 시 캐시 초기화 후 1회 재시도
+            _load_corpcode_xml.cache_clear()
+            corp_code = fetch_corp_code(stock_code)
+        if not corp_code:
             return {**empty, 'error': '기업 정보 없음'}
 
         with ThreadPoolExecutor(max_workers=3) as executor:
