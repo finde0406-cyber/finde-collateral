@@ -7,10 +7,12 @@ DART API 연동
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from functools import lru_cache
 from config import DART_API_KEY
 
-BASE_URL      = "https://opendart.fss.or.kr/api"
+BASE_URL     = "https://opendart.fss.or.kr/api"
+CORPCODE_URL = "https://raw.githubusercontent.com/finde0406-cyber/finde-collateral/main/data/corpCode.xml"
+_xml_cache   = None
+
 RISK_KEYWORDS = [
     '관리종목', '상장폐지', '거래정지', '횡령', '배임',
     '감자', '워크아웃', '법정관리', '회생', '부도',
@@ -22,36 +24,33 @@ def is_available() -> bool:
     return DART_API_KEY is not None and DART_API_KEY != ""
 
 
-@lru_cache(maxsize=1)
-def _load_corpcode_xml() -> bytes:
-    import zipfile, io
-    res = requests.get(
-        f"{BASE_URL}/corpCode.xml",
-        params={'crtfc_key': DART_API_KEY},
-        timeout=30
-    )
-    if res.status_code != 200:
-        raise Exception("CORPCODE 다운로드 실패")
-    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-        return z.read('CORPCODE.xml')
-
-
 def fetch_corp_code(stock_code: str):
+    """종목코드 → DART 고유번호 조회 (GitHub 파일 캐시)"""
     import xml.etree.ElementTree as ET
+
+    global _xml_cache
     code = str(stock_code).zfill(6)
+
     try:
-        xml_bytes = _load_corpcode_xml()
-        root = ET.fromstring(xml_bytes)
+        if _xml_cache is None:
+            res = requests.get(CORPCODE_URL, timeout=10)
+            if res.status_code != 200:
+                return None
+            _xml_cache = res.content
+
+        root = ET.fromstring(_xml_cache)
         for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
         return None
+
     except Exception:
-        _load_corpcode_xml.cache_clear()
+        _xml_cache = None
         return None
 
 
 def fetch_financial_year(corp_code: str, year: int):
+    """특정 연도 재무데이터 조회"""
     for fs_div in ['CFS', 'OFS']:
         try:
             res  = requests.get(
@@ -100,6 +99,7 @@ def fetch_financial_year(corp_code: str, year: int):
 
 
 def fetch_financial_data(corp_code: str) -> list:
+    """최근 2년 재무데이터 병렬 조회"""
     current_year = datetime.now().year
     years        = [current_year - 1, current_year - 2]
 
@@ -115,6 +115,7 @@ def fetch_financial_data(corp_code: str) -> list:
 
 
 def fetch_audit_opinion(corp_code: str) -> dict:
+    """최근 감사의견 조회"""
     try:
         res  = requests.get(
             f"{BASE_URL}/list.json",
@@ -153,6 +154,7 @@ def fetch_audit_opinion(corp_code: str) -> dict:
 
 
 def fetch_risk_disclosures(corp_code: str) -> list:
+    """최근 1년 위험 공시 탐지"""
     try:
         today  = datetime.now()
         bgn_de = f"{today.year - 1}{today.month:02d}{today.day:02d}"
@@ -184,6 +186,7 @@ def fetch_risk_disclosures(corp_code: str) -> list:
 
 
 def get_dart_analysis(stock_code: str) -> dict:
+    """메인 함수 — DART 전체 분석"""
     empty = {
         'available'       : True,
         'corp_code'       : None,
