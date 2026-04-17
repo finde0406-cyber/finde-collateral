@@ -39,8 +39,12 @@ def fetch_corp_code(stock_code: str):
             )
             if res.status_code != 200:
                 return None
-            with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                _xml_cache = z.read('CORPCODE.xml')
+            # ZIP이면 압축 해제, 아니면 직접 사용
+            try:
+                with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+                    _xml_cache = z.read('CORPCODE.xml')
+            except zipfile.BadZipFile:
+                _xml_cache = res.content
 
         root = ET.fromstring(_xml_cache)
         for item in root.findall('.//list'):
