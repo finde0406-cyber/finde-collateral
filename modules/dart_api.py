@@ -48,10 +48,11 @@ def fetch_corp_code(stock_code: str):
                 return item.findtext('corp_code', '').strip()
         return None
 
-    except Exception:
+    except Exception as e:
         _xml_cache = None
+        import streamlit as st
+        st.error(f"DART 에러: {str(e)}")
         return None
-
 
 def fetch_financial_year(corp_code: str, year: int):
     """특정 연도 재무데이터 조회"""
