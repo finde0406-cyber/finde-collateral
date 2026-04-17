@@ -75,6 +75,8 @@ def fetch_financial_year(corp_code: str, year: int):
             )
             data = res.json()
             if data.get('status') != '000':
+                import streamlit as st
+                st.warning(f"DART 재무 응답: {data.get('status')} / {data.get('message')}")
                 continue
 
             items = data.get('list', [])
