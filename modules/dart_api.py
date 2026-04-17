@@ -11,7 +11,6 @@ from functools import lru_cache
 from config import DART_API_KEY
 
 BASE_URL      = "https://opendart.fss.or.kr/api"
-
 RISK_KEYWORDS = [
     '관리종목', '상장폐지', '거래정지', '횡령', '배임',
     '감자', '워크아웃', '법정관리', '회생', '부도',
@@ -32,7 +31,7 @@ def _load_corpcode_xml() -> bytes:
         timeout=30
     )
     if res.status_code != 200:
-        return None
+        raise Exception("CORPCODE 다운로드 실패")
     with zipfile.ZipFile(io.BytesIO(res.content)) as z:
         return z.read('CORPCODE.xml')
 
@@ -42,19 +41,17 @@ def fetch_corp_code(stock_code: str):
     code = str(stock_code).zfill(6)
     try:
         xml_bytes = _load_corpcode_xml()
-        if xml_bytes is None:
-            return None
         root = ET.fromstring(xml_bytes)
         for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
         return None
     except Exception:
+        _load_corpcode_xml.cache_clear()
         return None
 
 
 def fetch_financial_year(corp_code: str, year: int):
-    """특정 연도 재무데이터 조회"""
     for fs_div in ['CFS', 'OFS']:
         try:
             res  = requests.get(
@@ -66,7 +63,7 @@ def fetch_financial_year(corp_code: str, year: int):
                     'reprt_code': '11011',
                     'fs_div'    : fs_div,
                 },
-                timeout=5
+                timeout=10
             )
             data = res.json()
             if data.get('status') != '000':
@@ -103,7 +100,6 @@ def fetch_financial_year(corp_code: str, year: int):
 
 
 def fetch_financial_data(corp_code: str) -> list:
-    """최근 2년 재무데이터 병렬 조회"""
     current_year = datetime.now().year
     years        = [current_year - 1, current_year - 2]
 
@@ -119,7 +115,6 @@ def fetch_financial_data(corp_code: str) -> list:
 
 
 def fetch_audit_opinion(corp_code: str) -> dict:
-    """최근 감사의견 조회"""
     try:
         res  = requests.get(
             f"{BASE_URL}/list.json",
@@ -158,7 +153,6 @@ def fetch_audit_opinion(corp_code: str) -> dict:
 
 
 def fetch_risk_disclosures(corp_code: str) -> list:
-    """최근 1년 위험 공시 탐지"""
     try:
         today  = datetime.now()
         bgn_de = f"{today.year - 1}{today.month:02d}{today.day:02d}"
@@ -190,7 +184,6 @@ def fetch_risk_disclosures(corp_code: str) -> list:
 
 
 def get_dart_analysis(stock_code: str) -> dict:
-    """메인 함수 — DART 전체 분석"""
     empty = {
         'available'       : True,
         'corp_code'       : None,
@@ -213,9 +206,9 @@ def get_dart_analysis(stock_code: str) -> dict:
             f_audit     = executor.submit(fetch_audit_opinion, corp_code)
             f_risk      = executor.submit(fetch_risk_disclosures, corp_code)
 
-            financial        = f_financial.result(timeout=10)
-            audit            = f_audit.result(timeout=10)
-            risk_disclosures = f_risk.result(timeout=10)
+            financial        = f_financial.result(timeout=15)
+            audit            = f_audit.result(timeout=15)
+            risk_disclosures = f_risk.result(timeout=15)
 
         return {
             'available'       : True,
