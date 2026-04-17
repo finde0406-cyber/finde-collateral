@@ -50,6 +50,8 @@ def fetch_corp_code(stock_code: str):
         for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
+        import streamlit as st
+        st.info(f"corp_code 검색 결과: {code} → 없음")
         return None
 
     except Exception as e:
