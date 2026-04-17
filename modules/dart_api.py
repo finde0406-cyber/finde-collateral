@@ -102,7 +102,9 @@ def fetch_financial_year(corp_code: str, year: int):
 
             if any(v is not None for v in [row['equity'], row['debt']]):
                 return row
-        except Exception:
+        except Exception as e:
+            import streamlit as st
+            st.error(f"재무데이터 에러: {str(e)}")
             continue
     return None
 
