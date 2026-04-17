@@ -1,8 +1,7 @@
 """
 DART API 연동
-- 재무제표 (최근 2년)
-- 감사의견
-- 위험 공시 탐지
+- 재무제표: GitHub data/dart/ 폴더에서 읽기 (IP 문제 없음)
+- 신규 종목: DART API 직접 호출 (정식님 PC IP 등록)
 """
 import requests
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +10,8 @@ from config import DART_API_KEY
 
 BASE_URL     = "https://opendart.fss.or.kr/api"
 CORPCODE_URL = "https://raw.githubusercontent.com/finde0406-cyber/finde-collateral/main/data/corpCode.xml"
+DART_DATA_URL = "https://raw.githubusercontent.com/finde0406-cyber/finde-collateral/main/data/dart/{stock_code}.json"
+
 _xml_cache   = None
 
 RISK_KEYWORDS = [
@@ -49,8 +50,20 @@ def fetch_corp_code(stock_code: str):
         return None
 
 
+def load_from_github(stock_code: str) -> dict:
+    """GitHub에 저장된 DART 데이터 로드"""
+    try:
+        url = DART_DATA_URL.format(stock_code=stock_code)
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return None
+
+
 def fetch_financial_year(corp_code: str, year: int):
-    """특정 연도 재무데이터 조회"""
+    """특정 연도 재무데이터 조회 (DART 직접)"""
     for fs_div in ['CFS', 'OFS']:
         try:
             res  = requests.get(
@@ -186,7 +199,7 @@ def fetch_risk_disclosures(corp_code: str) -> list:
 
 
 def get_dart_analysis(stock_code: str) -> dict:
-    """메인 함수 — DART 전체 분석"""
+    """메인 함수 — GitHub 저장 데이터 우선, 없으면 DART 직접 호출"""
     empty = {
         'available'       : True,
         'corp_code'       : None,
@@ -200,6 +213,19 @@ def get_dart_analysis(stock_code: str) -> dict:
         return {'available': False, 'error': 'API Key 미설정'}
 
     try:
+        # 1. GitHub 저장 데이터 먼저 확인
+        github_data = load_from_github(stock_code)
+        if github_data:
+            return {
+                'available'       : True,
+                'corp_code'       : github_data.get('corp_code'),
+                'financial'       : github_data.get('financial', []),
+                'audit'           : github_data.get('audit', {}),
+                'risk_disclosures': github_data.get('risk_disclosures', []),
+                'error'           : None
+            }
+
+        # 2. GitHub에 없으면 DART 직접 호출 (정식님 PC IP 필요)
         corp_code = fetch_corp_code(stock_code)
         if not corp_code:
             return {**empty, 'error': '기업 정보 없음'}
