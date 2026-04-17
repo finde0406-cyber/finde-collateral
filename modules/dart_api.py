@@ -54,7 +54,9 @@ def fetch_corp_code(stock_code: str):
             st.info(f"XML 첫번째 항목: {list(first[0])}, 태그들: {[c.tag for c in first[0]]}")
         else:
             all_tags = list(set([c.tag for c in root.iter()]))
-            st.info(f"list 없음. 전체 태그: {all_tags[:10]}")
+            message = root.findtext('message', '')
+            status = root.findtext('status', '')
+            st.info(f"list 없음. status: {status}, message: {message}")
         for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
