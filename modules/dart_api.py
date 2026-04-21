@@ -52,8 +52,10 @@ def fetch_corp_code(stock_code: str):
                 return item.findtext('corp_code', '').strip()
         return None
 
-    except Exception:
+    except Exception as e:
         _xml_cache = None
+        import streamlit as st
+        st.error(f"DART 에러: {str(e)}")
         return None
 
 
