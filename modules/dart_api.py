@@ -211,6 +211,8 @@ def get_dart_analysis(stock_code: str) -> dict:
 
     try:
         corp_code = fetch_corp_code(stock_code)
+        import streamlit as st
+        st.info(f"corp_code: {corp_code}")
         if not corp_code:
             return {**empty, 'error': '기업 정보 없음'}
 
