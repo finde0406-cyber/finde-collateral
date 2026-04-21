@@ -47,6 +47,15 @@ def fetch_corp_code(stock_code: str):
                 _xml_cache = res.content
 
         root = ET.fromstring(_xml_cache)
+        import streamlit as st
+        first = root.findall('.//list')
+        if first:
+            st.info(f"XML 태그: {[c.tag for c in first[0]]}")
+        else:
+            st.info(f"list 없음. 전체 태그: {list(set([c.tag for c in root.iter()]))[:10]}")
+            status = root.findtext('status', '')
+            message = root.findtext('message', '')
+            st.info(f"status: {status}, message: {message}")
         for item in root.findall('.//list'):
             if item.findtext('stock_code', '').strip() == code:
                 return item.findtext('corp_code', '').strip()
